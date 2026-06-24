@@ -18,6 +18,8 @@
 |------|------|------|
 | 통신 프로토콜 | Google A2A 공식 표준 (`a2a-sdk`) | 외부 에이전트와의 상호운용·표준 준수 |
 | 에이전트 내부 두뇌 | LangGraph + OpenAI (`langchain-openai`) | 노드/엣지 그래프로 내부 추론·툴 체이닝 구성 |
+| LLM 모델 | OpenAI `gpt-4o-mini` | 저비용으로 PoC 반복에 적합. 모든 에이전트·오케스트레이터 공통 |
+| 검색 툴 | Tavily (`langchain-tavily`) | Research Agent가 웹 검색에 사용. LangChain 도구로 LangGraph에 바로 연결 |
 | 오케스트레이션 | LLM 기반 동적 라우팅 | Agent Card를 근거로 매 과업마다 호출 계획을 LLM이 결정 |
 | 언어 | Python | A2A/LLM 생태계 SDK가 가장 풍부 |
 | ASGI 서버 | uvicorn | A2A SDK가 Starlette 앱을 노출 |
@@ -68,8 +70,8 @@ PoC지만 "에이전트를 쉽게 추가할 수 있는" 형태로 잡는다. 공
 
 ```
 a2a_agents/
-├── pyproject.toml              # a2a-sdk, langgraph, langchain-openai, uvicorn, httpx
-├── .env.example                # OPENAI_API_KEY 등
+├── pyproject.toml              # a2a-sdk, langgraph, langchain-openai, langchain-tavily, uvicorn, httpx
+├── .env.example                # OPENAI_API_KEY, TAVILY_API_KEY
 ├── README.md
 │
 ├── common/                     # 모든 에이전트가 공유하는 추상화
@@ -80,7 +82,7 @@ a2a_agents/
 ├── agents/
 │   ├── research/
 │   │   ├── __init__.py
-│   │   ├── graph.py            # LangGraph: OpenAI + 검색 툴로 자료 조사
+│   │   ├── graph.py            # LangGraph: OpenAI + Tavily 검색 툴로 자료 조사
 │   │   ├── card.py             # 이 에이전트의 AgentCard (skills 정의)
 │   │   └── __main__.py         # `python -m agents.research` → :9001 기동
 │   │
@@ -107,7 +109,7 @@ a2a_agents/
 |------|------|------|
 | `common/langgraph_executor.py` | LangGraph 그래프 하나를 받아 A2A `AgentExecutor.execute()`로 변환 (메시지 in → 그래프 실행 → 결과를 EventQueue로) | a2a-sdk, langgraph |
 | `common/server.py` | AgentCard + Executor를 받아 `A2AStarletteApplication` + uvicorn 기동 | a2a-sdk |
-| `agents/*/graph.py` | 그 에이전트만의 LangGraph 추론 로직 | langgraph, langchain-openai |
+| `agents/*/graph.py` | 그 에이전트만의 LangGraph 추론 로직 (Research는 Tavily 툴 사용) | langgraph, langchain-openai, langchain-tavily |
 | `agents/*/card.py` | 그 에이전트의 능력 선언 (AgentCard/AgentSkill) | a2a-sdk |
 | `orchestrator/registry.py` | 에이전트 URL → Agent Card 가져오기(discovery) | a2a-sdk client |
 | `orchestrator/client.py` | 특정 에이전트에 A2A 메시지 보내고 결과 받기 | a2a-sdk client |
@@ -170,7 +172,7 @@ A2A 메시지 도착
 
 | 레벨 | 대상 | 방식 |
 |------|------|------|
-| 단위 | `agents/*/graph.py` | LangGraph 그래프를 직접 invoke — OpenAI는 가짜 모델로 대체해 입력→출력 형태 검증 (네트워크/비용 없음) |
+| 단위 | `agents/*/graph.py` | LangGraph 그래프를 직접 invoke — OpenAI는 가짜 모델로, Tavily 검색 툴은 가짜 함수로 대체해 입력→출력 형태 검증 (네트워크/비용 없음) |
 | 단위 | `orchestrator/graph.py` 라우팅 | 가짜 Agent Card 목록 + 가짜 LLM 응답 주입 → 올바른 호출 계획 산출 검증 |
 | 통합 | `common/langgraph_executor.py` | 인메모리로 Executor에 메시지 넣고 EventQueue 출력 확인 (A2A 서버 미기동) |
 | E2E (수동) | 전체 | `run_all.sh`로 서버 띄우고 실제 과업 한 건 수행 후 확인 |
@@ -186,7 +188,7 @@ A2A 메시지 도착
 uv sync            # 또는 pip install -e .
 
 # 2. 환경변수
-cp .env.example .env   # OPENAI_API_KEY 채우기
+cp .env.example .env   # OPENAI_API_KEY, TAVILY_API_KEY 채우기
 
 # 3. 에이전트 서버들 기동 (각각 별도 터미널 또는 run_all.sh)
 python -m agents.research      # :9001
