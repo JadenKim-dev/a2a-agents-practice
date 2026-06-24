@@ -80,3 +80,29 @@ async def test_plan_calls_truncates_to_max_calls():
 
     # then
     assert len(plan) == 3
+
+
+async def test_plan_calls_returns_empty_on_malformed_json():
+    # given — LLM이 JSON 배열이 아닌 산문만 반환
+    fake_model = FakeMessagesListChatModel(
+        responses=[AIMessage(content="I'm sorry, I cannot help with that.")]
+    )
+
+    # when
+    plan = await plan_calls("task", _cards(), model=fake_model)
+
+    # then
+    assert plan == []
+
+
+async def test_plan_calls_returns_empty_on_non_array_json():
+    # given — LLM이 배열이 아닌 JSON 객체를 반환
+    fake_model = FakeMessagesListChatModel(
+        responses=[AIMessage(content='{"agent": "research", "input": "x"}')]
+    )
+
+    # when
+    plan = await plan_calls("task", _cards(), model=fake_model)
+
+    # then
+    assert plan == []

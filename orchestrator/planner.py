@@ -34,7 +34,12 @@ def _parse_plan(raw: str) -> list[PlannedCall]:
     """Responsible for extracting a list of PlannedCall dicts from raw LLM response text."""
     match = re.search(r"\[.*\]", raw, re.DOTALL)
     payload = match.group(0) if match else raw
-    parsed = json.loads(payload)
+    try:
+        parsed = json.loads(payload)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed, list):
+        return []
     plan: list[PlannedCall] = []
     for item in parsed:
         if isinstance(item, dict) and "agent" in item and "input" in item:
