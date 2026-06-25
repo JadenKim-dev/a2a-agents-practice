@@ -24,6 +24,8 @@ class LangGraphExecutor(AgentExecutor):
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         task = context.current_task
         if task is None:
+            if context.message is None:
+                raise ValueError("request has neither a current task nor a user message")
             task = new_task_from_user_message(context.message)
             await event_queue.enqueue_event(task)
         updater = TaskUpdater(event_queue, task.id, task.context_id)
