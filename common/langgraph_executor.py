@@ -4,6 +4,7 @@ from a2a.server.events import EventQueue
 from a2a.server.tasks import TaskUpdater
 from a2a.helpers.proto_helpers import new_task_from_user_message
 from a2a.types import Part
+from langgraph.graph.state import CompiledStateGraph
 
 
 def extract_last_text(graph_result: dict) -> str:
@@ -18,7 +19,7 @@ def extract_last_text(graph_result: dict) -> str:
 class LangGraphExecutor(AgentExecutor):
     """주입된 LangGraph 그래프 하나를 실행해 A2A Task로 응답한다."""
 
-    def __init__(self, graph):
+    def __init__(self, graph: CompiledStateGraph):
         self._graph = graph
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
