@@ -6,9 +6,8 @@ from common.langgraph_executor import LangGraphExecutor
 
 
 class FakeGraph:
-    async def ainvoke(self, state):
-        from langchain_core.messages import AIMessage
-        return {"messages": [AIMessage(content="ok")]}
+    async def astream(self, state, *, stream_mode):
+        yield {"dummy": "chunk"}
 
 
 def test_build_starlette_app_exposes_agent_card_route():
