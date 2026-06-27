@@ -1,10 +1,19 @@
 import asyncio
 from asyncio import QueueShutDown
 
+from langchain_core.messages import AIMessage
+
 from a2a.server.events import Event, EventQueueLegacy, InMemoryQueueManager
 from a2a.server.agent_execution import RequestContext
 from a2a.server.context import ServerCallContext
-from a2a.types import Message, Part, Role, SendMessageRequest, TaskStatusUpdateEvent
+from a2a.types import (
+    Message,
+    Part,
+    Role,
+    SendMessageRequest,
+    TaskState,
+    TaskStatusUpdateEvent,
+)
 
 from common.langgraph_executor import LangGraphExecutor, extract_last_text
 
@@ -19,7 +28,6 @@ class FakeGraph:
     async def ainvoke(self, state):
         if self._raises is not None:
             raise self._raises
-        from langchain_core.messages import AIMessage
         return {"messages": [AIMessage(content=self._reply_text)]}
 
 
@@ -45,7 +53,6 @@ async def _drain(event_queue: EventQueueLegacy) -> list[Event]:
 
 def test_extract_last_text_returns_final_message_content():
     # given
-    from langchain_core.messages import AIMessage
     result = {"messages": [AIMessage(content="hello")]}
 
     # when
@@ -69,9 +76,9 @@ async def test_executor_completes_task_with_graph_output():
     # then
     events = await _drain(event_queue)
     texts = []
-    for ev in events:
-        if isinstance(ev, TaskStatusUpdateEvent) and ev.status.message.parts:
-            texts.append(ev.status.message.parts[0].text)
+    for event in events:
+        if isinstance(event, TaskStatusUpdateEvent) and event.status.message.parts:
+            texts.append(event.status.message.parts[0].text)
     assert "researched answer" in texts
 
 
@@ -88,6 +95,5 @@ async def test_executor_marks_failed_when_graph_raises():
 
     # then
     events = await _drain(event_queue)
-    states = [ev.status.state for ev in events if isinstance(ev, TaskStatusUpdateEvent)]
-    from a2a.types import TaskState
+    states = [event.status.state for event in events if isinstance(event, TaskStatusUpdateEvent)]
     assert TaskState.TASK_STATE_FAILED in states
