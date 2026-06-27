@@ -84,3 +84,19 @@ def test_to_progress_event_returns_none_for_unmappable_chunk():
 
     # then
     assert event is None
+
+
+def test_step_to_progress_event_attaches_path():
+    # given — tool_call GraphStep과 출처 경로
+    from common.graph_progress import GraphStep
+    from orchestrator.events import step_to_progress_event
+    step = GraphStep(kind="tool_call", agent="tavily", input="quantum")
+
+    # when
+    event = step_to_progress_event(step, path=["research"])
+
+    # then
+    assert event.type == "tool_call"
+    assert event.agent == "tavily"
+    assert event.input == "quantum"
+    assert event.path == ["research"]
