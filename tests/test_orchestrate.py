@@ -1,10 +1,11 @@
+# tests/test_orchestrate.py
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
 from a2a.types import Message, Part, Role, StreamResponse, Task, TaskStatus, TaskState
 
 from common.agent_card import build_agent_card
 from orchestrator.client import extract_response_text
-from orchestrator.orchestrate import run_task
+from orchestrator.orchestrate import run_task_stream
 
 
 class ToolCallingFakeModel(GenericFakeChatModel):
@@ -31,6 +32,10 @@ def _cards():
     }
 
 
+async def _collect(stream):
+    return [event async for event in stream]
+
+
 def test_extract_response_text_reads_task_status_message():
     # given — 서버가 보내는 완료 Task를 흉내
     agent_msg = Message(
@@ -52,29 +57,29 @@ def test_extract_response_text_reads_task_status_message():
     assert text == "final answer"
 
 
-async def test_run_task_returns_no_agents_message_when_discovery_empty(monkeypatch):
+async def test_run_task_stream_yields_single_final_event_when_discovery_empty(monkeypatch):
     # given — discover가 빈 dict를 반환
     async def empty_discover(http):
         return {}
     monkeypatch.setattr("orchestrator.orchestrate.discover_agents", empty_discover)
 
     # when
-    answer = await run_task("any task", model=None)
+    events = await _collect(run_task_stream("any task", model=None))
 
     # then
-    assert answer == "No agents available."
+    assert len(events) == 1
+    assert events[0].type == "final"
+    assert events[0].content == "No agents available."
+    assert events[0].truncated is False
 
 
-async def test_run_task_chains_tools_and_returns_final_answer(monkeypatch):
-    # given — discover는 두 카드를, 원격 호출은 가짜로, LLM은 research→summarizer→최종답변 순으로 흉내
+async def test_run_task_stream_emits_tool_call_result_and_final_events(monkeypatch):
+    # given — discover는 두 카드, 원격 호출은 가짜, LLM은 research→summarizer→최종답변 순
     async def fake_discover(http):
         return _cards()
     monkeypatch.setattr("orchestrator.orchestrate.discover_agents", fake_discover)
 
-    tool_calls = []
-
     async def fake_call_agent(http, card, text):
-        tool_calls.append((card.name, text))
         return f"OUT[{text}]"
     monkeypatch.setattr("orchestrator.orchestrate.call_agent", fake_call_agent)
 
@@ -89,16 +94,21 @@ async def test_run_task_chains_tools_and_returns_final_answer(monkeypatch):
     ]))
 
     # when
-    answer = await run_task("research and summarize quantum computing", model=fake_model)
+    events = await _collect(run_task_stream(
+        "research and summarize quantum computing", model=fake_model))
 
     # then
-    assert tool_calls[0] == ("research", "quantum computing")
-    assert tool_calls[1] == ("summarizer", "OUT[quantum computing]")
-    assert answer == "final synthesized answer"
+    types = [event.type for event in events]
+    assert types == ["tool_call", "tool_result", "tool_call", "tool_result", "final"]
+    assert events[0].agent == "research"
+    assert events[0].input == "quantum computing"
+    assert events[1].output == "OUT[quantum computing]"
+    assert events[-1].content == "final synthesized answer"
+    assert events[-1].truncated is False
 
 
-async def test_run_task_returns_step_limit_message_on_recursion(monkeypatch):
-    # given — LLM이 끝없이 research를 호출하도록 흉내, recursion_limit=2로 강제 초과
+async def test_run_task_stream_emits_truncated_final_event_when_step_limit_hit(monkeypatch):
+    # given — LLM이 끝없이 research를 호출, model_call_limit=2로 강제 종합
     async def fake_discover(http):
         return _cards()
     monkeypatch.setattr("orchestrator.orchestrate.discover_agents", fake_discover)
@@ -107,15 +117,20 @@ async def test_run_task_returns_step_limit_message_on_recursion(monkeypatch):
         return "more"
     monkeypatch.setattr("orchestrator.orchestrate.call_agent", fake_call_agent)
 
-    def endless_tool_calls():
+    def endless_then_synthesis():
+        # 처음엔 tool_call, 강제 종합 스텝(tools 비워짐)에서는 plain 답변을 낸다.
+        yield AIMessage(content="", tool_calls=[
+            {"name": "research", "args": {"input": "again"},
+             "id": "c", "type": "tool_call"}])
         while True:
-            yield AIMessage(content="", tool_calls=[
-                {"name": "research", "args": {"input": "again"},
-                 "id": "c", "type": "tool_call"}])
-    fake_model = ToolCallingFakeModel(messages=endless_tool_calls())
+            yield AIMessage(content="best-effort partial answer")
+    fake_model = ToolCallingFakeModel(messages=endless_then_synthesis())
 
     # when
-    answer = await run_task("loop forever", model=fake_model, recursion_limit=2)
+    events = await _collect(run_task_stream(
+        "loop forever", model=fake_model, model_call_limit=2, recursion_limit=25))
 
     # then
-    assert answer == "Orchestration exceeded the step limit."
+    assert events[-1].type == "final"
+    assert events[-1].truncated is True
+    assert events[-1].content == "best-effort partial answer"
