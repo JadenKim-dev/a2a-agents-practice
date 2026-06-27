@@ -1,4 +1,3 @@
-# orchestrator/orchestrate.py
 """Task를 ReAct 에이전트로 스트리밍 오케스트레이션해 진행 이벤트를 흘린다."""
 from collections.abc import AsyncIterator
 
