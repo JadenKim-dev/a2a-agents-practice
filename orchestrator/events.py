@@ -16,6 +16,7 @@ class ProgressEvent:
     content: str | None = None
     truncated: bool | None = None
     message: str | None = None
+    path: list[str] | None = None
 
 
 def to_progress_event(chunk: dict) -> ProgressEvent | None:

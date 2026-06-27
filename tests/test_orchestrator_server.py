@@ -49,6 +49,29 @@ def test_post_run_streams_events_as_sse():
     assert payloads[1] == {"type": "final", "content": "done", "truncated": False}
 
 
+def test_event_to_payload_includes_path_when_present():
+    # given — path가 있는 tool_call 이벤트
+    from orchestrator.events import ProgressEvent
+    event = ProgressEvent(type="tool_call", agent="tavily", input="quantum", path=["research"])
+
+    # when
+    payload = json.loads(event_to_payload(event))
+
+    # then
+    assert payload == {"type": "tool_call", "agent": "tavily", "input": "quantum", "path": ["research"]}
+
+
+def test_event_to_payload_omits_path_when_none():
+    # given — path가 없는 final 이벤트
+    event = final_event(content="done", truncated=False)
+
+    # when
+    payload = json.loads(event_to_payload(event))
+
+    # then
+    assert "path" not in payload
+
+
 def test_post_run_returns_422_when_task_missing():
     # given — task 필드가 빠진 요청을 받는 앱
     async def fake_run_stream(task, **kwargs):
