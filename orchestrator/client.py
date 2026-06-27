@@ -5,8 +5,8 @@ from a2a.client import ClientConfig, ClientFactory
 from a2a.types import AgentCard, Message, Part, Role, SendMessageRequest, StreamResponse
 
 
-async def call_agent(http: httpx.AsyncClient, card: AgentCard, text: str) -> str:
-    factory = ClientFactory(ClientConfig(httpx_client=http, streaming=False))
+async def call_agent(http_client: httpx.AsyncClient, card: AgentCard, text: str) -> str:
+    factory = ClientFactory(ClientConfig(httpx_client=http_client, streaming=False))
     client = factory.create(card)
     request = SendMessageRequest(
         message=Message(
