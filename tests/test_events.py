@@ -24,6 +24,7 @@ def test_to_progress_event_maps_tool_call_to_tool_call_event():
     event = to_progress_event(chunk)
 
     # then
+    assert event is not None
     assert event.type == "tool_call"
     assert event.agent == "research"
     assert event.input == "quantum computing"
@@ -44,6 +45,7 @@ def test_to_progress_event_maps_tool_message_to_tool_result_event():
     event = to_progress_event(chunk)
 
     # then
+    assert event is not None
     assert event.type == "tool_result"
     assert event.agent == "research"
     assert event.output == "OUT[quantum computing]"
@@ -57,6 +59,7 @@ def test_to_progress_event_maps_plain_ai_message_to_final_event():
     event = to_progress_event(chunk)
 
     # then
+    assert event is not None
     assert event.type == "final"
     assert event.content == "final synthesized answer"
     assert event.truncated is False
@@ -72,6 +75,7 @@ def test_to_progress_event_reads_truncated_marking_from_response_metadata():
     event = to_progress_event(chunk)
 
     # then
+    assert event is not None
     assert event.type == "final"
     assert event.truncated is True
 
