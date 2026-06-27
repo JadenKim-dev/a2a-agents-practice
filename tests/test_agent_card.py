@@ -22,7 +22,7 @@ def test_agent_card_url_is_in_supported_interfaces():
     assert len(card.supported_interfaces) == 1
     assert card.supported_interfaces[0].url == url
     assert card.supported_interfaces[0].protocol_binding == "JSONRPC"
-    assert not card.capabilities.streaming
+    assert card.capabilities.streaming
     assert card.default_input_modes == ["text"]
     assert card.default_output_modes == ["text"]
     assert len(card.skills) == 1
