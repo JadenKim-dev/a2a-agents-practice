@@ -1,7 +1,8 @@
 """step limit 도달 직전에 도구를 제거하고 종합을 강제해 best-effort 답변을 만든다."""
 from langchain.agents.middleware import AgentMiddleware
+from langchain_core.messages import SystemMessage
 
-SYNTHESIS_PROMPT = (
+SYNTHESIS_PROMPT = SystemMessage(
     "You have reached the step budget and may not call any more tools. "
     "Using only the information gathered so far, write the best possible "
     "final answer to the user's task. Acknowledge briefly if it is incomplete."
@@ -19,7 +20,7 @@ class StepLimitSynthesisMiddleware(AgentMiddleware):
     async def awrap_model_call(self, request, handler):
         self._call_count += 1
         if self._call_count >= self._model_call_limit:
-            request = request.override(tools=[], system_prompt=SYNTHESIS_PROMPT)
+            request = request.override(tools=[], system_message=SYNTHESIS_PROMPT)
             response = await handler(request)
             message = response.result[0]
             message.response_metadata = {**message.response_metadata, "truncated": True}
