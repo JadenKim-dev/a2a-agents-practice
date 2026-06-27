@@ -59,7 +59,7 @@ async def test_run_task_returns_no_agents_message_when_discovery_empty(monkeypat
     monkeypatch.setattr("orchestrator.orchestrate.discover_agents", empty_discover)
 
     # when
-    answer = await run_task("any task", model=ToolCallingFakeModel(messages=iter([])))
+    answer = await run_task("any task", model=None)
 
     # then
     assert answer == "No agents available."
@@ -76,7 +76,7 @@ async def test_run_task_chains_tools_and_returns_final_answer(monkeypatch):
     async def fake_call_agent(http, card, text):
         tool_calls.append((card.name, text))
         return f"OUT[{text}]"
-    monkeypatch.setattr("orchestrator.agent_tool.call_agent", fake_call_agent)
+    monkeypatch.setattr("orchestrator.orchestrate.call_agent", fake_call_agent)
 
     fake_model = ToolCallingFakeModel(messages=iter([
         AIMessage(content="", tool_calls=[
@@ -105,7 +105,7 @@ async def test_run_task_returns_step_limit_message_on_recursion(monkeypatch):
 
     async def fake_call_agent(http, card, text):
         return "more"
-    monkeypatch.setattr("orchestrator.agent_tool.call_agent", fake_call_agent)
+    monkeypatch.setattr("orchestrator.orchestrate.call_agent", fake_call_agent)
 
     def endless_tool_calls():
         while True:

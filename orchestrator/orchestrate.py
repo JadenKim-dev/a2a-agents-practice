@@ -5,6 +5,7 @@ from langgraph.errors import GraphRecursionError
 
 from orchestrator.registry import discover_agents
 from orchestrator.agent_tool import build_agent_tool
+from orchestrator.client import call_agent
 from orchestrator.llm import message_content_to_text
 
 ORCHESTRATOR_SYSTEM_PROMPT = (
@@ -36,7 +37,8 @@ def build_orchestrator_graph(http, cards, model=None):
     if model is None:
         from langchain_openai import ChatOpenAI
         model = ChatOpenAI(model="gpt-4o-mini")
-    tools = [build_agent_tool(http, name, card) for name, card in cards.items()]
+    tools = [build_agent_tool(http, name, card, call_agent_fn=call_agent)
+             for name, card in cards.items()]
     return create_agent(
         model=model, tools=tools, system_prompt=ORCHESTRATOR_SYSTEM_PROMPT
     )

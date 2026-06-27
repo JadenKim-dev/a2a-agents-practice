@@ -6,14 +6,11 @@ from a2a.types import AgentCard
 from orchestrator.client import call_agent
 
 
-def build_agent_tool(http, name: str, card: AgentCard, call_agent_fn=None) -> StructuredTool:
+def build_agent_tool(http, name: str, card: AgentCard, call_agent_fn=call_agent) -> StructuredTool:
     """원격 A2A 에이전트 하나를 ReAct가 호출 가능한 단일-인자 tool로 감싼다."""
-    import orchestrator.agent_tool as _self
-
     async def call(input: str) -> str:
-        fn = call_agent_fn if call_agent_fn is not None else _self.call_agent
         try:
-            return await fn(http, card, input)
+            return await call_agent_fn(http, card, input)
         # 루프 무중단 보장: 예외를 그래프로 전파하지 않고 LLM이 관찰할 텍스트로 흡수한다.
         except Exception as error:  # noqa: BLE001
             return f"[error calling {name}: {error}]"
