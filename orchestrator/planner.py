@@ -67,5 +67,5 @@ async def plan_calls(
         ]
     )
     plan = _parse_plan(message_content_to_text(response))
-    known = [call for call in plan if call["agent"] in cards]
-    return known[:max_calls]
+    resolved_calls = [call for call in plan if call["agent"] in cards]
+    return resolved_calls[:max_calls]
