@@ -17,7 +17,7 @@
 | 영역 | 선택 | 이유 |
 |------|------|------|
 | 통신 프로토콜 | Google A2A 공식 표준 (`a2a-sdk`) | 외부 에이전트와의 상호운용·표준 준수 |
-| 에이전트 내부 두뇌 | LangGraph + OpenAI (`langchain-openai`) | 노드/엣지 그래프로 내부 추론·툴 체이닝 구성 |
+| 에이전트 내부 두뇌 | LangGraph + OpenAI (`langchain.agents.create_agent`) | prebuilt ReAct 에이전트로 내부 추론·툴 체이닝 구성 |
 | LLM 모델 | OpenAI `gpt-4o-mini` | 저비용으로 PoC 반복에 적합. 모든 에이전트·오케스트레이터 공통 |
 | 검색 툴 | Tavily (`langchain-tavily`) | Research Agent가 웹 검색에 사용. LangChain 도구로 LangGraph에 바로 연결 |
 | 오케스트레이션 | LLM 기반 동적 라우팅 | Agent Card를 근거로 매 과업마다 호출 계획을 LLM이 결정 |
@@ -76,27 +76,30 @@ a2a_agents/
 │
 ├── common/                     # 모든 에이전트가 공유하는 추상화
 │   ├── __init__.py
+│   ├── agent_card.py           # A2A AgentCard(protobuf) 빌더
 │   ├── langgraph_executor.py   # LangGraph 그래프를 A2A AgentExecutor로 감싸는 어댑터
 │   └── server.py               # AgentCard + Executor → uvicorn 서버 기동 헬퍼
 │
 ├── agents/
 │   ├── research/
 │   │   ├── __init__.py
-│   │   ├── graph.py            # LangGraph: OpenAI + Tavily 검색 툴로 자료 조사
+│   │   ├── graph.py            # create_agent: OpenAI + Tavily 검색 툴로 자료 조사
 │   │   ├── card.py             # 이 에이전트의 AgentCard (skills 정의)
 │   │   └── __main__.py         # `python -m agents.research` → :9001 기동
 │   │
 │   └── summarizer/
 │       ├── __init__.py
-│       ├── graph.py            # LangGraph: 입력 텍스트를 요약
+│       ├── graph.py            # create_agent: 입력 텍스트를 요약
 │       ├── card.py
 │       └── __main__.py         # `python -m agents.summarizer` → :9002 기동
 │
 ├── orchestrator/
 │   ├── __init__.py
 │   ├── registry.py             # 알려진 에이전트 URL 목록 → Agent Card discovery
-│   ├── client.py               # A2AClient 래퍼: 원격 에이전트에 메시지 전송
-│   ├── graph.py                # LangGraph: LLM이 호출 대상·순서를 동적 라우팅
+│   ├── client.py               # A2A 클라이언트 래퍼: 원격 에이전트에 메시지 전송
+│   ├── planner.py              # LLM이 카드를 근거로 호출 대상·순서를 동적 라우팅
+│   ├── orchestrate.py          # discover→plan→execute→synthesize 실행 흐름
+│   ├── llm.py                  # LangChain 메시지 content를 문자열로 정규화
 │   └── __main__.py             # CLI: 과업 입력받아 실행
 │
 └── scripts/
@@ -107,13 +110,16 @@ a2a_agents/
 
 | 단위 | 책임 | 의존 |
 |------|------|------|
-| `common/langgraph_executor.py` | LangGraph 그래프 하나를 받아 A2A `AgentExecutor.execute()`로 변환 (메시지 in → 그래프 실행 → 결과를 EventQueue로) | a2a-sdk, langgraph |
-| `common/server.py` | AgentCard + Executor를 받아 `A2AStarletteApplication` + uvicorn 기동 | a2a-sdk |
-| `agents/*/graph.py` | 그 에이전트만의 LangGraph 추론 로직 (Research는 Tavily 툴 사용) | langgraph, langchain-openai, langchain-tavily |
+| `common/agent_card.py` | name/description/skill 인자를 받아 A2A `AgentCard`(protobuf) 생성 | a2a-sdk |
+| `common/langgraph_executor.py` | LangGraph 그래프 하나를 받아 A2A `AgentExecutor.execute()`로 변환 (메시지 in → 그래프 실행 → 결과를 `TaskUpdater`로 EventQueue에) | a2a-sdk, langgraph |
+| `common/server.py` | AgentCard + Executor를 받아 카드/JSON-RPC 라우트로 `Starlette` 앱 조립 후 uvicorn 기동 | a2a-sdk |
+| `agents/*/graph.py` | 그 에이전트만의 추론 로직을 `create_agent`로 구성 (Research는 Tavily 툴 사용) | langchain, langchain-openai, langchain-tavily |
 | `agents/*/card.py` | 그 에이전트의 능력 선언 (AgentCard/AgentSkill) | a2a-sdk |
 | `orchestrator/registry.py` | 에이전트 URL → Agent Card 가져오기(discovery) | a2a-sdk client |
 | `orchestrator/client.py` | 특정 에이전트에 A2A 메시지 보내고 결과 받기 | a2a-sdk client |
-| `orchestrator/graph.py` | LLM 기반 라우팅: 카드 보고 호출 순서 결정 + 결과 종합 | langgraph |
+| `orchestrator/planner.py` | LLM 기반 라우팅: 카드 보고 호출 대상·순서 결정 | langchain-openai |
+| `orchestrator/orchestrate.py` | discover→plan→execute→synthesize 실행 흐름 + 결과 종합 | langchain-openai |
+| `orchestrator/llm.py` | LangChain 메시지 content를 일반 문자열로 정규화 | langchain-core |
 
 **설계 의도:** 새 에이전트 추가 = `agents/<name>/`에 `graph.py` + `card.py` +
 `__main__.py` 3개만 작성. 공통 서버/어댑터 코드는 재사용. 오케스트레이터는
@@ -129,9 +135,11 @@ PoC는 동기(`message/send`)로 시작한다.
 ```
 A2A 메시지 도착
   → AgentExecutor.execute(context, event_queue)
+      → current_task 없으면 메시지로 Task 생성·enqueue
+      → TaskUpdater.start_work()
       → context에서 사용자 텍스트 추출
-      → LangGraph 그래프 invoke (OpenAI 호출 / 툴 실행)
-      → 최종 텍스트를 event_queue로 enqueue (Task 완료 이벤트)
+      → LangGraph 그래프 ainvoke (OpenAI 호출 / 툴 실행)
+      → 최종 텍스트를 TaskUpdater.complete()로 enqueue (Task 완료 이벤트)
   → A2A SDK가 JSON-RPC 응답으로 직렬화해 클라이언트에 반환
 ```
 
@@ -173,7 +181,7 @@ A2A 메시지 도착
 | 레벨 | 대상 | 방식 |
 |------|------|------|
 | 단위 | `agents/*/graph.py` | LangGraph 그래프를 직접 invoke — OpenAI는 가짜 모델로, Tavily 검색 툴은 가짜 함수로 대체해 입력→출력 형태 검증 (네트워크/비용 없음) |
-| 단위 | `orchestrator/graph.py` 라우팅 | 가짜 Agent Card 목록 + 가짜 LLM 응답 주입 → 올바른 호출 계획 산출 검증 |
+| 단위 | `orchestrator/planner.py` 라우팅 | 가짜 Agent Card 목록 + 가짜 LLM 응답 주입 → 올바른 호출 계획 산출 검증 |
 | 통합 | `common/langgraph_executor.py` | 인메모리로 Executor에 메시지 넣고 EventQueue 출력 확인 (A2A 서버 미기동) |
 | E2E (수동) | 전체 | `run_all.sh`로 서버 띄우고 실제 과업 한 건 수행 후 확인 |
 
@@ -199,7 +207,7 @@ python -m orchestrator "양자컴퓨팅 최신 동향을 조사해 3문단으로
 ```
 
 각 에이전트 서버는 독립적으로 떠 있으므로 기동 후
-`http://localhost:9001/.well-known/agent-card.json`을 직접 확인해 Agent Card
+`http://127.0.0.1:9001/.well-known/agent-card.json`을 직접 확인해 Agent Card
 노출을 검증할 수 있다.
 
 ## 범위 밖 (확장 지점)
