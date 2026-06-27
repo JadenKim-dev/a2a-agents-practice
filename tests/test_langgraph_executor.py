@@ -28,8 +28,6 @@ def _user_request(text):
     return SendMessageRequest(message=msg)
 
 
-# NOTE: RequestContext는 첫 위치 인자로 call_context(ServerCallContext)를 요구한다.
-# EventQueue는 InMemoryQueueManager.create_or_tap()으로 구체 큐(EventQueueLegacy)를 받는다.
 async def _drain(event_queue: EventQueueLegacy) -> list[Event]:
     # event_queue.close()는 모든 항목에 대한 task_done() 호출을 기다린다.
     closing_task = asyncio.create_task(event_queue.close())
