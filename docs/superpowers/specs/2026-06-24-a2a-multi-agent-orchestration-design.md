@@ -148,6 +148,10 @@ A2A 메시지 도착
 
 ### B. 오케스트레이터 측 (LLM 동적 라우팅)
 
+> **갱신(2026-06-27):** 아래의 단발 plan 방식은 ReAct 에이전트 방식으로
+> 대체되었다. 상세는 [react-orchestrator-design](2026-06-27-react-orchestrator-design.md)
+> 참조. 호출 순서·입력·종합을 LLM이 ReAct 루프 안에서 매 스텝 결정한다.
+
 ```
 사용자 과업
   → [discovery] registry가 각 에이전트 URL의 Agent Card 수집
