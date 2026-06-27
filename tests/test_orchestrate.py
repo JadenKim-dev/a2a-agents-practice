@@ -78,7 +78,7 @@ async def test_run_task_stream_emits_tool_call_result_and_final_events(monkeypat
         return _cards()
     monkeypatch.setattr("orchestrator.orchestrate.discover_agents", fake_discover)
 
-    async def fake_call_agent(http, card, text):
+    async def fake_call_agent(http, card, text, on_event=None):
         return f"OUT[{text}]"
     monkeypatch.setattr("orchestrator.orchestrate.call_agent", fake_call_agent)
 
@@ -112,7 +112,7 @@ async def test_run_task_stream_emits_truncated_final_event_when_step_limit_hit(m
         return _cards()
     monkeypatch.setattr("orchestrator.orchestrate.discover_agents", fake_discover)
 
-    async def fake_call_agent(http, card, text):
+    async def fake_call_agent(http, card, text, on_event=None):
         return "more"
     monkeypatch.setattr("orchestrator.orchestrate.call_agent", fake_call_agent)
 
