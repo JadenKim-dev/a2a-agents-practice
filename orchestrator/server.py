@@ -2,31 +2,31 @@
 import json
 from dataclasses import asdict
 
-from starlette.applications import Starlette
-from starlette.requests import Request
-from starlette.responses import StreamingResponse
-from starlette.routing import Route
+from fastapi import FastAPI, Request
+from sse_starlette.sse import EventSourceResponse
 
 from orchestrator.events import ProgressEvent
 from orchestrator.orchestrate import run_task_stream
 
 
-def build_app(run_stream=run_task_stream) -> Starlette:
+def build_app(run_stream=run_task_stream) -> FastAPI:
     """POST /run에서 task를 받아 진행 이벤트를 SSE로 흘리는 앱을 만든다."""
-    async def run(request: Request) -> StreamingResponse:
-        body = await request.json()
-        task = body["task"]
+    app = FastAPI()
+
+    @app.post("/run")
+    async def stream_task_events(request: Request) -> EventSourceResponse:
+        task = (await request.json())["task"]
 
         async def event_stream():
             async for event in run_stream(task):
-                yield event_to_sse(event)
+                yield {"data": event_to_payload(event)}
 
-        return StreamingResponse(event_stream(), media_type="text/event-stream")
+        return EventSourceResponse(event_stream())
 
-    return Starlette(routes=[Route("/run", run, methods=["POST"])])
+    return app
 
 
-def event_to_sse(event: ProgressEvent) -> str:
-    """ProgressEvent를 None 필드를 제외한 data: <json> SSE 라인으로 직렬화한다."""
-    payload = {key: value for key, value in asdict(event).items() if value is not None}
-    return f"data: {json.dumps(payload)}\n\n"
+def event_to_payload(event: ProgressEvent) -> str:
+    """ProgressEvent를 None 필드를 제외한 JSON 문자열로 직렬화한다."""
+    fields = {key: value for key, value in asdict(event).items() if value is not None}
+    return json.dumps(fields)

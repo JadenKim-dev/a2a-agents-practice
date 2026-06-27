@@ -1,22 +1,19 @@
 import json
 
-from starlette.testclient import TestClient
+from fastapi.testclient import TestClient
 
 from orchestrator.events import tool_call_event, final_event
-from orchestrator.server import build_app, event_to_sse
+from orchestrator.server import build_app, event_to_payload
 
 
-def test_event_to_sse_serializes_only_present_fields():
+def test_event_to_payload_serializes_only_present_fields():
     # given — agent와 input만 있는 tool_call 이벤트
     event = tool_call_event(agent="research", input="quantum")
 
     # when
-    line = event_to_sse(event)
+    payload = json.loads(event_to_payload(event))
 
     # then
-    assert line.startswith("data: ")
-    assert line.endswith("\n\n")
-    payload = json.loads(line[len("data: "):].strip())
     assert payload == {"type": "tool_call", "agent": "research", "input": "quantum"}
 
 
@@ -34,8 +31,7 @@ def test_post_run_streams_events_as_sse():
     # then
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
-    blocks = [b for b in response.text.split("\n\n") if b]
-    first = json.loads(blocks[0][len("data: "):])
-    last = json.loads(blocks[1][len("data: "):])
-    assert first == {"type": "tool_call", "agent": "research", "input": "hello"}
-    assert last == {"type": "final", "content": "done", "truncated": False}
+    payloads = [json.loads(block[len("data: "):])
+                for block in response.text.split("\r\n\r\n") if block]
+    assert payloads[0] == {"type": "tool_call", "agent": "research", "input": "hello"}
+    assert payloads[1] == {"type": "final", "content": "done", "truncated": False}
