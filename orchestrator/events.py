@@ -53,7 +53,7 @@ def _message_to_event(message) -> ProgressEvent | None:
         call = message.tool_calls[0]
         return tool_call_event(agent=call["name"], input=call["args"].get("input", ""))
     if isinstance(message, ToolMessage):
-        return tool_result_event(agent=message.name, output=message_content_to_text(message))
+        return tool_result_event(agent=message.name or "unknown", output=message_content_to_text(message))
     if isinstance(message, AIMessage):
         truncated = bool(message.response_metadata.get("truncated", False))
         return final_event(content=message_content_to_text(message), truncated=truncated)
