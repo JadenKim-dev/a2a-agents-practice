@@ -1,4 +1,6 @@
 """Task를 discover→plan→execute→synthesize로 수행하도록 오케스트레이션한다."""
+from typing import TypedDict
+
 import httpx
 
 from orchestrator.registry import discover_agents
@@ -12,9 +14,15 @@ SYNTHESIS_SYSTEM_PROMPT = (
 )
 
 
-async def execute_plan(http, cards, plan, call_agent_fn=call_agent) -> list[dict]:
+class StepResult(TypedDict):
+    agent: str
+    input: str
+    output: str
+
+
+async def execute_plan(http, cards, plan, call_agent_fn=call_agent) -> list[StepResult]:
     """계획을 순차 실행하며 각 단계의 출력을 다음 단계 입력으로 이어준다."""
-    steps: list[dict] = []
+    steps: list[StepResult] = []
     previous_output = ""
     for call in plan:
         resolved_input = call["input"].replace(
@@ -31,13 +39,13 @@ async def execute_plan(http, cards, plan, call_agent_fn=call_agent) -> list[dict
     return steps
 
 
-async def synthesize(task: str, steps: list[dict], model=None) -> str:
+async def synthesize(task: str, step_results: list[StepResult], model=None) -> str:
     """수집된 단계 출력들을 LLM으로 종합해 최종 답변을 만든다."""
     if model is None:
         from langchain_openai import ChatOpenAI
         model = ChatOpenAI(model="gpt-4o-mini")
     collected = "\n\n".join(
-        f"[{step['agent']}] {step['output']}" for step in steps
+        f"[{step_result['agent']}] {step_result['output']}" for step_result in step_results
     )
     response = await model.ainvoke(
         [
@@ -50,12 +58,12 @@ async def synthesize(task: str, steps: list[dict], model=None) -> str:
 
 async def run_task(task: str, model=None) -> str:
     """Task에 대해 discover→plan→execute→synthesize 전체 파이프라인을 수행한다."""
-    async with httpx.AsyncClient() as http:
-        cards = await discover_agents(http)
+    async with httpx.AsyncClient() as http_client:
+        cards = await discover_agents(http_client)
         if not cards:
             return "No agents available."
-        plan = await plan_calls(task, cards, model=model)
-        if not plan:
+        planned_calls = await plan_calls(task, cards, model=model)
+        if not planned_calls:
             return "Planner produced no executable calls."
-        steps = await execute_plan(http, cards, plan)
-        return await synthesize(task, steps, model=model)
+        step_results = await execute_plan(http_client, cards, planned_calls)
+        return await synthesize(task, step_results, model=model)
