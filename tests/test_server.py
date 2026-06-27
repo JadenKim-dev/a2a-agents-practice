@@ -1,4 +1,5 @@
 from starlette.applications import Starlette
+from starlette.routing import Route
 
 from common.agent_card import build_agent_card
 from common.langgraph_executor import LangGraphExecutor
@@ -29,5 +30,5 @@ def test_build_starlette_app_exposes_agent_card_route():
 
     # then
     assert isinstance(app, Starlette)
-    paths = {r.path for r in app.routes}
+    paths = {route.path for route in app.routes if isinstance(route, Route)}
     assert "/.well-known/agent-card.json" in paths
