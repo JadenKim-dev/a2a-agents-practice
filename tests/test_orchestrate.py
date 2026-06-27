@@ -131,3 +131,37 @@ async def test_run_task_stream_emits_truncated_final_event_when_step_limit_hit(m
     assert events[-1].type == "final"
     assert events[-1].truncated is True
     assert events[-1].content == "best-effort partial answer"
+
+
+async def test_run_task_stream_merges_sub_agent_events_with_path(monkeypatch):
+    # given — research 호출 중 서브 tool 진행 2건을 콜백하는 가짜 call_agent
+    async def fake_discover(http):
+        return _cards()
+    monkeypatch.setattr("orchestrator.orchestrate.discover_agents", fake_discover)
+
+    async def fake_call_agent(http, card, text, on_event=None):
+        if on_event is not None:
+            on_event({"kind": "tool_call", "agent": "tavily", "input": "quantum"})
+            on_event({"kind": "tool_result", "agent": "tavily", "output": "OUT[quantum]"})
+        return "briefing"
+    monkeypatch.setattr("orchestrator.orchestrate.call_agent", fake_call_agent)
+
+    fake_model = ToolCallingFakeModel(messages=iter([
+        AIMessage(content="", tool_calls=[
+            {"name": "research", "args": {"input": "quantum computing"},
+             "id": "c1", "type": "tool_call"}]),
+        AIMessage(content="final answer"),
+    ]))
+
+    # when
+    events = await _collect(run_task_stream("research quantum", model=fake_model))
+
+    # then — 서브 tavily 이벤트가 path=["research"]로 섞여 나오고, 로컬 이벤트는 path가 없다
+    sub_events = [e for e in events if e.path == ["research"]]
+    assert [e.type for e in sub_events] == ["tool_call", "tool_result"]
+    assert sub_events[0].agent == "tavily"
+    assert sub_events[1].output == "OUT[quantum]"
+    local_tool_calls = [e for e in events if e.type == "tool_call" and e.path is None]
+    assert local_tool_calls[0].agent == "research"
+    assert events[-1].type == "final"
+    assert events[-1].content == "final answer"
