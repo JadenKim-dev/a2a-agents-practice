@@ -16,6 +16,7 @@ async def discover_agents(http: httpx.AsyncClient) -> dict[str, AgentCard]:
         try:
             resolver = A2ACardResolver(http, base_url=url)
             cards[name] = await resolver.get_agent_card()
+        # 한 에이전트의 discovery 실패가 나머지 discovery를 막지 않도록 예외를 잡아 건너뛴다.
         except Exception as error:  # noqa: BLE001
             print(f"[discover] skip {name} ({url}): {error}")
     return cards
