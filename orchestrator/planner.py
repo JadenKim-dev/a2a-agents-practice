@@ -5,6 +5,8 @@ from typing import TypedDict
 
 from a2a.types import AgentCard
 
+from orchestrator.llm import message_content_to_text
+
 PREVIOUS_OUTPUT_PLACEHOLDER = "{PREVIOUS_OUTPUT}"
 
 PLANNER_SYSTEM_PROMPT = (
@@ -64,6 +66,6 @@ async def plan_calls(
             {"role": "user", "content": f"Task: {task}\n\nAgents:\n{catalog}"},
         ]
     )
-    plan = _parse_plan(response.content)
+    plan = _parse_plan(message_content_to_text(response))
     known = [call for call in plan if call["agent"] in cards]
     return known[:max_calls]

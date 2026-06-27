@@ -3,6 +3,7 @@ import httpx
 
 from orchestrator.registry import discover_agents
 from orchestrator.client import call_agent
+from orchestrator.llm import message_content_to_text
 from orchestrator.planner import plan_calls, PREVIOUS_OUTPUT_PLACEHOLDER
 
 SYNTHESIS_SYSTEM_PROMPT = (
@@ -44,7 +45,7 @@ async def synthesize(task: str, steps: list[dict], model=None) -> str:
             {"role": "user", "content": f"Task: {task}\n\nOutputs:\n{collected}"},
         ]
     )
-    return response.content
+    return message_content_to_text(response)
 
 
 async def run_task(task: str, model=None) -> str:
