@@ -33,4 +33,4 @@ def build_app(run_stream=run_task_stream) -> FastAPI:
 def event_to_payload(event: ProgressEvent) -> str:
     """ProgressEvent를 None 필드를 제외한 JSON 문자열로 직렬화한다."""
     fields = {key: value for key, value in asdict(event).items() if value is not None}
-    return json.dumps(fields)
+    return json.dumps(fields, ensure_ascii=False)
