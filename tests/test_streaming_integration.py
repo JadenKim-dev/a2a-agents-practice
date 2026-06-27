@@ -7,12 +7,10 @@ executor ↔ client 왕복 스트리밍을 검증하는 통합 테스트.
 (b) final 텍스트 last-write-wins (완료 이벤트가 마지막에 도착해 최종 텍스트가 이김)
 두 가지를 동시에 검증한다.
 """
-import pytest
 import httpx
 from langchain_core.messages import AIMessage
 
-from a2a.client import A2ACardResolver, ClientConfig, ClientFactory
-from a2a.types import AgentCapabilities
+from a2a.client import A2ACardResolver
 
 from common.agent_card import build_agent_card
 from common.langgraph_executor import LangGraphExecutor
