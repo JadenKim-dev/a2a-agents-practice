@@ -16,6 +16,9 @@ ORCHESTRATOR_SYSTEM_PROMPT = (
     "into the next as needed, then write the final answer for the user."
 )
 
+# 원격 에이전트는 웹 검색·LLM 호출로 수 초~수십 초가 걸리므로 httpx 기본 5초로는 부족하다.
+AGENT_REQUEST_TIMEOUT_SECONDS = 60.0
+
 
 async def run_task_stream(
     task: str,
@@ -24,7 +27,7 @@ async def run_task_stream(
     recursion_limit: int = 25,
 ) -> AsyncIterator[ProgressEvent]:
     """Task에 대해 discover→build→ReAct astream을 수행하며 진행 이벤트를 yield한다."""
-    async with httpx.AsyncClient() as http:
+    async with httpx.AsyncClient(timeout=AGENT_REQUEST_TIMEOUT_SECONDS) as http:
         cards = await discover_agents(http)
         if not cards:
             yield final_event("No agents available.", truncated=False)
