@@ -1,21 +1,14 @@
-"""오케스트레이터 CLI 진입점: python -m orchestrator "<task>"."""
-import asyncio
-import sys
-
+"""오케스트레이터 서버 진입점: python -m orchestrator → :9000 SSE 서버."""
+import uvicorn
 from dotenv import load_dotenv
 
-from orchestrator.orchestrate import run_task
+from orchestrator.server import build_app
 
 load_dotenv()
 
 
 def main() -> None:
-    if len(sys.argv) < 2:
-        print('usage: python -m orchestrator "<task>"')
-        raise SystemExit(1)
-    task = sys.argv[1]
-    answer = asyncio.run(run_task(task))
-    print(answer)
+    uvicorn.run(build_app(), host="127.0.0.1", port=9000)
 
 
 if __name__ == "__main__":
