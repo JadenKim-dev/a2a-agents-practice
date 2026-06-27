@@ -53,7 +53,7 @@ async def test_build_agent_tool_delegates_input_to_call_agent():
     )
 
     # when
-    output = await tool.coroutine(input="quantum computing")
+    output = await tool.ainvoke({"input": "quantum computing"})
 
     # then
     assert received["text"] == "quantum computing"
@@ -73,7 +73,7 @@ async def test_build_agent_tool_absorbs_call_failure_into_text():
     )
 
     # when
-    output = await tool.coroutine(input="x")
+    output = await tool.ainvoke({"input": "x"})
 
     # then
     assert "connection refused" in output
