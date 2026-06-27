@@ -35,3 +35,17 @@ def test_post_run_streams_events_as_sse():
                 for block in response.text.split("\r\n\r\n") if block]
     assert payloads[0] == {"type": "tool_call", "agent": "research", "input": "hello"}
     assert payloads[1] == {"type": "final", "content": "done", "truncated": False}
+
+
+def test_post_run_returns_422_when_task_missing():
+    # given — task 필드가 빠진 요청을 받는 앱
+    async def fake_run_stream(task, **kwargs):
+        yield final_event(content="unused", truncated=False)
+
+    client = TestClient(build_app(run_stream=fake_run_stream))
+
+    # when
+    response = client.post("/run", json={})
+
+    # then
+    assert response.status_code == 422
