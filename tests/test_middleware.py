@@ -1,3 +1,4 @@
+from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.tools import StructuredTool
 
@@ -15,7 +16,7 @@ def _dummy_tool():
 def _request_with_tools():
     # override가 새 ModelRequest를 dataclasses.replace로 만들므로, 최소 필드만 채운 진짜 ModelRequest를 쓴다.
     return ModelRequest(
-        model=None,
+        model=GenericFakeChatModel(messages=iter([])),
         messages=[],
         system_message=None,
         tool_choice=None,
@@ -50,7 +51,7 @@ async def test_strips_tools_and_injects_synthesis_prompt_on_final_step():
 
     async def handler(request):
         seen["tools"] = request.tools
-        seen["system_prompt"] = request.system_prompt
+        seen["system_message"] = request.system_message
         return ModelResponse(result=[AIMessage(content="best effort")], structured_response=None)
 
     # when
@@ -58,5 +59,5 @@ async def test_strips_tools_and_injects_synthesis_prompt_on_final_step():
 
     # then
     assert seen["tools"] == []
-    assert seen["system_prompt"] == SYNTHESIS_PROMPT
+    assert seen["system_message"] == SYNTHESIS_PROMPT
     assert response.result[0].response_metadata["truncated"] is True

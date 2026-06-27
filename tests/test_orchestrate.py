@@ -97,8 +97,8 @@ async def test_run_task_stream_emits_tool_call_result_and_final_events(monkeypat
         "research and summarize quantum computing", model=fake_model))
 
     # then
-    types = [event.type for event in events]
-    assert types == ["tool_call", "tool_result", "tool_call", "tool_result", "final"]
+    event_types = [event.type for event in events]
+    assert event_types == ["tool_call", "tool_result", "tool_call", "tool_result", "final"]
     assert events[0].agent == "research"
     assert events[0].input == "quantum computing"
     assert events[1].output == "OUT[quantum computing]"
@@ -107,7 +107,7 @@ async def test_run_task_stream_emits_tool_call_result_and_final_events(monkeypat
 
 
 async def test_run_task_stream_emits_truncated_final_event_when_step_limit_hit(monkeypatch):
-    # given — LLM이 끝없이 research를 호출, model_call_limit=2로 강제 종합
+    # given — 1번째 스텝은 tool_call, model_call_limit=2가 2번째 스텝의 도구를 비워 종합을 강제
     async def fake_discover(http):
         return _cards()
     monkeypatch.setattr("orchestrator.orchestrate.discover_agents", fake_discover)
@@ -116,14 +116,12 @@ async def test_run_task_stream_emits_truncated_final_event_when_step_limit_hit(m
         return "more"
     monkeypatch.setattr("orchestrator.orchestrate.call_agent", fake_call_agent)
 
-    def endless_then_synthesis():
-        # 처음엔 tool_call, 강제 종합 스텝(tools 비워짐)에서는 plain 답변을 낸다.
-        yield AIMessage(content="", tool_calls=[
+    fake_model = ToolCallingFakeModel(messages=iter([
+        AIMessage(content="", tool_calls=[
             {"name": "research", "args": {"input": "again"},
-             "id": "c", "type": "tool_call"}])
-        while True:
-            yield AIMessage(content="best-effort partial answer")
-    fake_model = ToolCallingFakeModel(messages=endless_then_synthesis())
+             "id": "c", "type": "tool_call"}]),
+        AIMessage(content="best-effort partial answer"),
+    ]))
 
     # when
     events = await _collect(run_task_stream(
