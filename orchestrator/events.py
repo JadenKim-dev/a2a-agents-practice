@@ -14,7 +14,7 @@ class ProgressEvent:
     input: str | None = None
     output: str | None = None
     content: str | None = None
-    truncated: bool = False
+    truncated: bool | None = None
     message: str | None = None
 
 
