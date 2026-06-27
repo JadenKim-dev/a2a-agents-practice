@@ -1,16 +1,23 @@
 """LangGraph 그래프를 A2A AgentExecutor로 변환하는 어댑터다."""
+from typing import Any, Protocol
+
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.server.tasks import TaskUpdater
 from a2a.helpers.proto_helpers import new_task_from_user_message
 from a2a.types import Part
-from langgraph.graph.state import CompiledStateGraph
+
+
+class InvocableGraph(Protocol):
+    """LangGraphExecutor가 그래프에 요구하는 최소 호출 규약"""
+
+    async def ainvoke(self, state: dict) -> dict[str, Any]: ...
 
 
 class LangGraphExecutor(AgentExecutor):
     """주입된 LangGraph 그래프 하나를 실행해 A2A Task로 응답한다."""
 
-    def __init__(self, graph: CompiledStateGraph):
+    def __init__(self, graph: InvocableGraph):
         self._graph = graph
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
