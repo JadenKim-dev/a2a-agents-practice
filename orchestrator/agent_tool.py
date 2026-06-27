@@ -7,7 +7,7 @@ from orchestrator.client import call_agent
 
 
 def build_agent_tool(http, name: str, card: AgentCard, call_agent_fn=call_agent) -> StructuredTool:
-    """원격 A2A 에이전트 하나를 ReAct가 호출 가능한 단일-인자 tool로 감싼다."""
+    """원격 A2A 에이전트 하나를 ReAct가 호출 가능한 단일 인자 tool로 감싼다."""
     async def call(input: str) -> str:
         try:
             return await call_agent_fn(http, card, input)
