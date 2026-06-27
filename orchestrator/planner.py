@@ -23,6 +23,28 @@ class PlannedCall(TypedDict):
     input: str
 
 
+async def plan_calls(
+    task: str,
+    cards: dict[str, AgentCard],
+    model=None,
+    max_calls: int = 5,
+) -> list[PlannedCall]:
+    """주어진 Task에 대해 LLM으로 순서가 있는 에이전트 호출 목록을 산출한다."""
+    if model is None:
+        from langchain_openai import ChatOpenAI
+        model = ChatOpenAI(model="gpt-4o-mini")
+    catalog = cards_to_catalog(cards)
+    response = await model.ainvoke(
+        [
+            {"role": "system", "content": PLANNER_SYSTEM_PROMPT},
+            {"role": "user", "content": f"Task: {task}\n\nAgents:\n{catalog}"},
+        ]
+    )
+    plan = _parse_plan(message_content_to_text(response))
+    resolved_calls = [call for call in plan if call["agent"] in cards]
+    return resolved_calls[:max_calls]
+
+
 def cards_to_catalog(cards: dict[str, AgentCard]) -> str:
     """에이전트 카드를 LLM 프롬프트용 사람이 읽기 좋은 카탈로그로 변환한다."""
     lines = []
@@ -47,25 +69,3 @@ def _parse_plan(raw: str) -> list[PlannedCall]:
         if isinstance(item, dict) and "agent" in item and "input" in item:
             plan.append({"agent": str(item["agent"]), "input": str(item["input"])})
     return plan
-
-
-async def plan_calls(
-    task: str,
-    cards: dict[str, AgentCard],
-    model=None,
-    max_calls: int = 5,
-) -> list[PlannedCall]:
-    """주어진 Task에 대해 LLM으로 순서가 있는 에이전트 호출 목록을 산출한다."""
-    if model is None:
-        from langchain_openai import ChatOpenAI
-        model = ChatOpenAI(model="gpt-4o-mini")
-    catalog = cards_to_catalog(cards)
-    response = await model.ainvoke(
-        [
-            {"role": "system", "content": PLANNER_SYSTEM_PROMPT},
-            {"role": "user", "content": f"Task: {task}\n\nAgents:\n{catalog}"},
-        ]
-    )
-    plan = _parse_plan(message_content_to_text(response))
-    resolved_calls = [call for call in plan if call["agent"] in cards]
-    return resolved_calls[:max_calls]

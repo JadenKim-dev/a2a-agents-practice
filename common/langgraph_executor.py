@@ -7,15 +7,6 @@ from a2a.types import Part
 from langgraph.graph.state import CompiledStateGraph
 
 
-def extract_last_text(graph_result: dict) -> str:
-    messages = graph_result.get("messages", [])
-    if not messages:
-        return ""
-    last = messages[-1]
-    content = getattr(last, "content", last)
-    return content if isinstance(content, str) else str(content)
-
-
 class LangGraphExecutor(AgentExecutor):
     """주입된 LangGraph 그래프 하나를 실행해 A2A Task로 응답한다."""
 
@@ -51,3 +42,12 @@ class LangGraphExecutor(AgentExecutor):
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
         raise NotImplementedError("cancel is out of scope for the PoC")
+
+
+def extract_last_text(graph_result: dict) -> str:
+    messages = graph_result.get("messages", [])
+    if not messages:
+        return ""
+    last = messages[-1]
+    content = getattr(last, "content", last)
+    return content if isinstance(content, str) else str(content)

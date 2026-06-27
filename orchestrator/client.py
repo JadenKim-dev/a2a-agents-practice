@@ -5,23 +5,6 @@ from a2a.client import ClientConfig, ClientFactory
 from a2a.types import AgentCard, Message, Part, Role, SendMessageRequest, StreamResponse
 
 
-def extract_response_text(stream_response: StreamResponse) -> str:
-    which = stream_response.WhichOneof("payload")
-    if which == "task":
-        status = stream_response.task.status
-        if status.message and status.message.parts:
-            return status.message.parts[0].text
-    if which == "message":
-        parts = stream_response.message.parts
-        if parts:
-            return parts[0].text
-    if which == "status_update":
-        message = stream_response.status_update.status.message
-        if message and message.parts:
-            return message.parts[0].text
-    return ""
-
-
 async def call_agent(http: httpx.AsyncClient, card: AgentCard, text: str) -> str:
     factory = ClientFactory(ClientConfig(httpx_client=http, streaming=False))
     client = factory.create(card)
@@ -38,3 +21,20 @@ async def call_agent(http: httpx.AsyncClient, card: AgentCard, text: str) -> str
         if extracted:
             final_text = extracted
     return final_text
+
+
+def extract_response_text(stream_response: StreamResponse) -> str:
+    which = stream_response.WhichOneof("payload")
+    if which == "task":
+        status = stream_response.task.status
+        if status.message and status.message.parts:
+            return status.message.parts[0].text
+    if which == "message":
+        parts = stream_response.message.parts
+        if parts:
+            return parts[0].text
+    if which == "status_update":
+        message = stream_response.status_update.status.message
+        if message and message.parts:
+            return message.parts[0].text
+    return ""

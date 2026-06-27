@@ -20,6 +20,19 @@ class StepResult(TypedDict):
     output: str
 
 
+async def run_task(task: str, model=None) -> str:
+    """Task에 대해 discover→plan→execute→synthesize 전체 파이프라인을 수행한다."""
+    async with httpx.AsyncClient() as http_client:
+        cards = await discover_agents(http_client)
+        if not cards:
+            return "No agents available."
+        planned_calls = await plan_calls(task, cards, model=model)
+        if not planned_calls:
+            return "Planner produced no executable calls."
+        step_results = await execute_plan(http_client, cards, planned_calls)
+        return await synthesize(task, step_results, model=model)
+
+
 async def execute_plan(http, cards, plan, call_agent_fn=call_agent) -> list[StepResult]:
     """계획을 순차 실행하며 각 단계의 출력을 다음 단계 입력으로 이어준다."""
     steps: list[StepResult] = []
@@ -54,16 +67,3 @@ async def synthesize(task: str, step_results: list[StepResult], model=None) -> s
         ]
     )
     return message_content_to_text(response)
-
-
-async def run_task(task: str, model=None) -> str:
-    """Task에 대해 discover→plan→execute→synthesize 전체 파이프라인을 수행한다."""
-    async with httpx.AsyncClient() as http_client:
-        cards = await discover_agents(http_client)
-        if not cards:
-            return "No agents available."
-        planned_calls = await plan_calls(task, cards, model=model)
-        if not planned_calls:
-            return "Planner produced no executable calls."
-        step_results = await execute_plan(http_client, cards, planned_calls)
-        return await synthesize(task, step_results, model=model)
