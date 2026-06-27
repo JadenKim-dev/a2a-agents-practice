@@ -1,16 +1,34 @@
-from a2a.types import (
-    Message,
-    Part,
-    Role,
-    StreamResponse,
-    Task,
-    TaskStatus,
-    TaskState,
-)
+from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+from langchain_core.messages import AIMessage
+from a2a.types import Message, Part, Role, StreamResponse, Task, TaskStatus, TaskState
 
+from common.agent_card import build_agent_card
 from orchestrator.client import extract_response_text
-from orchestrator.orchestrate import execute_plan
-from orchestrator.planner import PREVIOUS_OUTPUT_PLACEHOLDER
+from orchestrator.orchestrate import run_task
+
+
+class ToolCallingFakeModel(GenericFakeChatModel):
+    """bind_tools를 self로 돌려 scripted 메시지로 ReAct 루프를 결정론적으로 구동하는 가짜 모델."""
+
+    def bind_tools(self, tools, **kwargs):
+        return self
+
+
+def _cards():
+    return {
+        "research": build_agent_card(
+            name="research", description="researches topics",
+            url="http://127.0.0.1:9001/", skill_id="research",
+            skill_name="Web Research", skill_description="web research",
+            skill_tags=["research"],
+        ),
+        "summarizer": build_agent_card(
+            name="summarizer", description="summarizes text",
+            url="http://127.0.0.1:9002/", skill_id="summarize",
+            skill_name="Summarize", skill_description="summarize text",
+            skill_tags=["summarize"],
+        ),
+    }
 
 
 def test_extract_response_text_reads_task_status_message():
@@ -34,42 +52,70 @@ def test_extract_response_text_reads_task_status_message():
     assert text == "final answer"
 
 
-async def test_execute_plan_chains_previous_output():
-    # given — 두 단계: research 출력이 summarizer 입력으로 치환되어야 함
-    cards = {"research": object(), "summarizer": object()}
-    plan = [
-        {"agent": "research", "input": "quantum computing"},
-        {"agent": "summarizer", "input": PREVIOUS_OUTPUT_PLACEHOLDER},
-    ]
-    calls = []
+async def test_run_task_returns_no_agents_message_when_discovery_empty(monkeypatch):
+    # given — discover가 빈 dict를 반환
+    async def empty_discover(http):
+        return {}
+    monkeypatch.setattr("orchestrator.orchestrate.discover_agents", empty_discover)
+
+    # when
+    answer = await run_task("any task", model=ToolCallingFakeModel(messages=iter([])))
+
+    # then
+    assert answer == "No agents available."
+
+
+async def test_run_task_chains_tools_and_returns_final_answer(monkeypatch):
+    # given — discover는 두 카드를, 원격 호출은 가짜로, LLM은 research→summarizer→최종답변 순으로 흉내
+    async def fake_discover(http):
+        return _cards()
+    monkeypatch.setattr("orchestrator.orchestrate.discover_agents", fake_discover)
+
+    tool_calls = []
 
     async def fake_call_agent(http, card, text):
-        calls.append(text)
-        return f"output-for:{text}"
+        tool_calls.append((card.name, text))
+        return f"OUT[{text}]"
+    monkeypatch.setattr("orchestrator.agent_tool.call_agent", fake_call_agent)
+
+    fake_model = ToolCallingFakeModel(messages=iter([
+        AIMessage(content="", tool_calls=[
+            {"name": "research", "args": {"input": "quantum computing"},
+             "id": "c1", "type": "tool_call"}]),
+        AIMessage(content="", tool_calls=[
+            {"name": "summarizer", "args": {"input": "OUT[quantum computing]"},
+             "id": "c2", "type": "tool_call"}]),
+        AIMessage(content="final synthesized answer"),
+    ]))
 
     # when
-    steps = await execute_plan(
-        http=None, cards=cards, plan=plan, call_agent_fn=fake_call_agent
-    )
+    answer = await run_task("research and summarize quantum computing", model=fake_model)
 
     # then
-    assert calls[0] == "quantum computing"
-    assert calls[1] == "output-for:quantum computing"  # placeholder 치환됨
-    assert steps[1]["output"] == "output-for:output-for:quantum computing"
+    assert tool_calls[0] == ("research", "quantum computing")
+    assert tool_calls[1] == ("summarizer", "OUT[quantum computing]")
+    assert answer == "final synthesized answer"
 
 
-async def test_execute_plan_records_error_on_failure():
-    # given
-    cards = {"research": object()}
-    plan = [{"agent": "research", "input": "x"}]
+async def test_run_task_returns_step_limit_message_on_recursion(monkeypatch):
+    # given — LLM이 끝없이 research를 호출하도록 흉내, recursion_limit=2로 강제 초과
+    async def fake_discover(http):
+        return _cards()
+    monkeypatch.setattr("orchestrator.orchestrate.discover_agents", fake_discover)
 
-    async def failing_call_agent(http, card, text):
-        raise RuntimeError("connection refused")
+    async def fake_call_agent(http, card, text):
+        return "more"
+    monkeypatch.setattr("orchestrator.agent_tool.call_agent", fake_call_agent)
+
+    def endless_tool_calls():
+        while True:
+            yield AIMessage(content="", tool_calls=[
+                {"name": "research", "args": {"input": "again"},
+                 "id": "c", "type": "tool_call"}])
+    fake_model = ToolCallingFakeModel(messages=endless_tool_calls())
 
     # when
-    steps = await execute_plan(
-        http=None, cards=cards, plan=plan, call_agent_fn=failing_call_agent
-    )
+    answer = await run_task("loop forever", model=fake_model, recursion_limit=2)
 
     # then
-    assert "connection refused" in steps[0]["output"]
+    assert answer == "Orchestration exceeded the step limit."
