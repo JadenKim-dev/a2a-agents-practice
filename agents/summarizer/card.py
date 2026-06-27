@@ -1,4 +1,4 @@
-"""Summarizer 에이전트의 A2A AgentCard 책임."""
+"""Summarizer 에이전트의 A2A AgentCard를 정의한다."""
 from common.agent_card import build_agent_card
 
 SUMMARIZER_URL = "http://127.0.0.1:9002/"

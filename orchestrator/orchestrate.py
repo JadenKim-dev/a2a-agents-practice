@@ -1,4 +1,4 @@
-"""과업을 discover→plan→execute→synthesize로 수행하는 오케스트레이션 책임."""
+"""Task를 discover→plan→execute→synthesize로 수행하도록 오케스트레이션한다."""
 import httpx
 
 from orchestrator.registry import discover_agents
@@ -13,7 +13,7 @@ SYNTHESIS_SYSTEM_PROMPT = (
 
 
 async def execute_plan(http, cards, plan, call_agent_fn=call_agent) -> list[dict]:
-    """Responsible for executing a plan sequentially, chaining each step's output into the next."""
+    """계획을 순차 실행하며 각 단계의 출력을 다음 단계 입력으로 이어준다."""
     steps: list[dict] = []
     previous_output = ""
     for call in plan:
@@ -32,7 +32,7 @@ async def execute_plan(http, cards, plan, call_agent_fn=call_agent) -> list[dict
 
 
 async def synthesize(task: str, steps: list[dict], model=None) -> str:
-    """Responsible for combining collected step outputs into a final answer using an LLM."""
+    """수집된 단계 출력들을 LLM으로 종합해 최종 답변을 만든다."""
     if model is None:
         from langchain_openai import ChatOpenAI
         model = ChatOpenAI(model="gpt-4o-mini")
@@ -49,7 +49,7 @@ async def synthesize(task: str, steps: list[dict], model=None) -> str:
 
 
 async def run_task(task: str, model=None) -> str:
-    """Responsible for running the full discover→plan→execute→synthesize pipeline for a task."""
+    """Task에 대해 discover→plan→execute→synthesize 전체 파이프라인을 수행한다."""
     async with httpx.AsyncClient() as http:
         cards = await discover_agents(http)
         if not cards:

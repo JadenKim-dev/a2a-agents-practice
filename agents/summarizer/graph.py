@@ -1,4 +1,4 @@
-"""입력 텍스트를 요약하는 Summarizer 에이전트의 LangGraph 그래프 책임."""
+"""입력 텍스트를 요약하는 Summarizer 에이전트의 LangGraph 그래프를 정의한다."""
 from langchain.agents import create_agent
 
 SUMMARIZER_SYSTEM_PROMPT = (

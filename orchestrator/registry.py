@@ -1,4 +1,4 @@
-"""알려진 A2A 에이전트 URL 목록과 카드 discovery 책임."""
+"""알려진 A2A 에이전트 URL 목록을 두고 카드를 discovery한다."""
 import httpx
 
 from a2a.client import A2ACardResolver

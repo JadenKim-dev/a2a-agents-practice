@@ -1,4 +1,4 @@
-"""A2A AgentCard(protobuf) 생성 책임."""
+"""A2A AgentCard(protobuf)를 생성한다."""
 from a2a.types import AgentCard, AgentCapabilities, AgentInterface, AgentSkill
 
 

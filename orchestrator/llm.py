@@ -1,12 +1,12 @@
-"""LangChain 메시지 응답을 일반 문자열로 정규화하는 책임."""
+"""LangChain 메시지 응답을 일반 문자열로 정규화한다."""
 from langchain_core.messages import BaseMessage
 
 
 def message_content_to_text(message: BaseMessage) -> str:
-    """Responsible for flattening a LangChain message's content into a plain string.
+    """LangChain 메시지의 content를 일반 문자열로 평탄화한다.
 
-    Message content may be a string or a list of content blocks (text or dict);
-    this collects every text fragment and joins them into a single string.
+    메시지 content는 문자열일 수도, content 블록(텍스트 또는 dict)의 리스트일 수도 있다.
+    모든 텍스트 조각을 모아 하나의 문자열로 이어붙인다.
     """
     content = message.content
     if isinstance(content, str):

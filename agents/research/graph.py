@@ -1,4 +1,4 @@
-"""웹 검색으로 주제를 조사하는 Research 에이전트의 LangGraph 그래프 책임."""
+"""웹 검색으로 주제를 조사하는 Research 에이전트의 LangGraph 그래프를 정의한다."""
 from langchain_core.tools import tool
 from langchain.agents import create_agent
 

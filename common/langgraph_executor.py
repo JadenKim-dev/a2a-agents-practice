@@ -1,4 +1,4 @@
-"""LangGraph 그래프를 A2A AgentExecutor로 변환하는 어댑터 책임."""
+"""LangGraph 그래프를 A2A AgentExecutor로 변환하는 어댑터다."""
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.server.tasks import TaskUpdater

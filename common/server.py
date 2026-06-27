@@ -1,4 +1,4 @@
-"""AgentCard와 Executor로 A2A Starlette 앱을 조립하고 uvicorn으로 기동하는 책임."""
+"""AgentCard와 Executor로 A2A Starlette 앱을 조립하고 uvicorn으로 기동한다."""
 import uvicorn
 from starlette.applications import Starlette
 

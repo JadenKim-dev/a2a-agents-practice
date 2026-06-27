@@ -1,4 +1,4 @@
-"""원격 A2A 에이전트에 메시지를 보내고 응답 텍스트를 회수하는 책임."""
+"""원격 A2A 에이전트에 메시지를 보내고 응답 텍스트를 회수한다."""
 import httpx
 
 from a2a.client import ClientConfig, ClientFactory

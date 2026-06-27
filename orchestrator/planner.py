@@ -1,4 +1,4 @@
-"""에이전트 카드를 근거로 LLM이 호출 계획을 산출하는 동적 라우팅 책임."""
+"""에이전트 카드를 근거로 LLM이 호출 계획을 산출해 동적으로 라우팅한다."""
 import json
 import re
 from typing import TypedDict
@@ -24,7 +24,7 @@ class PlannedCall(TypedDict):
 
 
 def cards_to_catalog(cards: dict[str, AgentCard]) -> str:
-    """Responsible for converting agent cards into a human-readable catalog for LLM prompts."""
+    """에이전트 카드를 LLM 프롬프트용 사람이 읽기 좋은 카탈로그로 변환한다."""
     lines = []
     for name, card in cards.items():
         skills = ", ".join(skill.name for skill in card.skills)
@@ -33,7 +33,7 @@ def cards_to_catalog(cards: dict[str, AgentCard]) -> str:
 
 
 def _parse_plan(raw: str) -> list[PlannedCall]:
-    """Responsible for extracting a list of PlannedCall dicts from raw LLM response text."""
+    """원본 LLM 응답 텍스트에서 PlannedCall 딕셔너리 목록을 추출한다."""
     match = re.search(r"\[.*\]", raw, re.DOTALL)
     payload = match.group(0) if match else raw
     try:
@@ -55,7 +55,7 @@ async def plan_calls(
     model=None,
     max_calls: int = 5,
 ) -> list[PlannedCall]:
-    """Responsible for producing an ordered list of agent calls for a given task using an LLM."""
+    """주어진 Task에 대해 LLM으로 순서가 있는 에이전트 호출 목록을 산출한다."""
     if model is None:
         from langchain_openai import ChatOpenAI
         model = ChatOpenAI(model="gpt-4o-mini")
