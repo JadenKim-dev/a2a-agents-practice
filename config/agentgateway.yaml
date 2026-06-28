@@ -1,0 +1,17 @@
+# research/summarizer A2A 서버 앞단에 두는 포트 1:1 패스스루 프록시 설정.
+# :8001 → :9001 (research), :8002 → :9002 (summarizer).
+binds:
+  - port: 8001
+    listeners:
+      - routes:
+          - policies:
+              a2a: {}
+            backends:
+              - host: 127.0.0.1:9001
+  - port: 8002
+    listeners:
+      - routes:
+          - policies:
+              a2a: {}
+            backends:
+              - host: 127.0.0.1:9002
