@@ -1,9 +1,7 @@
 """ReAct 스트림 chunk를 사용자에게 노출할 진행 이벤트로 변환한다."""
 from dataclasses import dataclass
 
-from langchain_core.messages import AIMessage, ToolMessage
-
-from orchestrator.llm import message_content_to_text
+from common.graph_progress import GraphStep, extract_graph_step
 
 
 @dataclass
@@ -16,16 +14,24 @@ class ProgressEvent:
     content: str | None = None
     truncated: bool | None = None
     message: str | None = None
+    path: list[str] | None = None
 
 
 def to_progress_event(chunk: dict) -> ProgressEvent | None:
     """astream updates chunk 하나를 진행 이벤트로 변환한다. 매핑 대상이 없으면 None을 반환한다."""
-    for update in chunk.values():
-        for message in update.get("messages", []):
-            event = _message_to_event(message)
-            if event is not None:
-                return event
-    return None
+    step = extract_graph_step(chunk)
+    if step is None:
+        return None
+    return step_to_progress_event(step)
+
+
+def step_to_progress_event(step: GraphStep, path: list[str] | None = None) -> ProgressEvent:
+    """GraphStep을 오케스트레이터 진행 이벤트로 감싼다. path가 주어지면 출처 경로로 부여한다."""
+    if step.kind == "tool_call":
+        return ProgressEvent(type="tool_call", agent=step.agent, input=step.input, path=path)
+    if step.kind == "tool_result":
+        return ProgressEvent(type="tool_result", agent=step.agent, output=step.output, path=path)
+    return ProgressEvent(type="final", content=step.content, truncated=step.truncated, path=path)
 
 
 def tool_call_event(agent: str, input: str) -> ProgressEvent:
@@ -46,15 +52,3 @@ def final_event(content: str, truncated: bool) -> ProgressEvent:
 def error_event(message: str) -> ProgressEvent:
     """스트림 도중 발생한 예외를 알리는 이벤트를 만든다."""
     return ProgressEvent(type="error", message=message)
-
-
-def _message_to_event(message) -> ProgressEvent | None:
-    if isinstance(message, AIMessage) and message.tool_calls:
-        call = message.tool_calls[0]
-        return tool_call_event(agent=call["name"], input=call["args"].get("input", ""))
-    if isinstance(message, ToolMessage):
-        return tool_result_event(agent=message.name or "unknown", output=message_content_to_text(message))
-    if isinstance(message, AIMessage):
-        truncated = bool(message.response_metadata.get("truncated", False))
-        return final_event(content=message_content_to_text(message), truncated=truncated)
-    return None

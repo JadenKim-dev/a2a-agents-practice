@@ -20,7 +20,7 @@ def build_agent_card(
         ],
         default_input_modes=["text"],
         default_output_modes=["text"],
-        capabilities=AgentCapabilities(streaming=False),
+        capabilities=AgentCapabilities(streaming=True),
         skills=[
             AgentSkill(
                 id=skill_id,

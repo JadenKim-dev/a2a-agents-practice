@@ -49,6 +49,29 @@ def test_post_run_streams_events_as_sse():
     assert payloads[1] == {"type": "final", "content": "done", "truncated": False}
 
 
+def test_event_to_payload_includes_path_when_present():
+    # given — path가 있는 tool_call 이벤트
+    from orchestrator.events import ProgressEvent
+    event = ProgressEvent(type="tool_call", agent="tavily", input="quantum", path=["research"])
+
+    # when
+    payload = json.loads(event_to_payload(event))
+
+    # then
+    assert payload == {"type": "tool_call", "agent": "tavily", "input": "quantum", "path": ["research"]}
+
+
+def test_event_to_payload_omits_path_when_none():
+    # given — path가 없는 final 이벤트
+    event = final_event(content="done", truncated=False)
+
+    # when
+    payload = json.loads(event_to_payload(event))
+
+    # then
+    assert "path" not in payload
+
+
 def test_post_run_returns_422_when_task_missing():
     # given — task 필드가 빠진 요청을 받는 앱
     async def fake_run_stream(task, **kwargs):
@@ -61,3 +84,24 @@ def test_post_run_returns_422_when_task_missing():
 
     # then
     assert response.status_code == 422
+
+
+def test_post_run_streams_sub_agent_path_event():
+    # given — path가 실린 서브 tool_call 이벤트를 내는 fake run_stream
+    from orchestrator.events import ProgressEvent
+
+    async def fake_run_stream(task, **kwargs):
+        yield ProgressEvent(type="tool_call", agent="tavily", input="양자컴퓨팅", path=["research"])
+        yield final_event(content="완료", truncated=False)
+
+    client = TestClient(build_app(run_stream=fake_run_stream))
+
+    # when
+    response = client.post("/run", json={"task": "hello"})
+
+    # then — path가 payload에 실리고 한글이 이스케이프되지 않는다
+    assert "\\u" not in response.text
+    payloads = [json.loads(block[len("data: "):])
+                for block in response.text.split("\r\n\r\n") if block]
+    assert payloads[0] == {"type": "tool_call", "agent": "tavily", "input": "양자컴퓨팅", "path": ["research"]}
+    assert payloads[1]["content"] == "완료"
