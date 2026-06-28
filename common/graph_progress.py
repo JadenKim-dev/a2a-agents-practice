@@ -1,4 +1,4 @@
-"""LangGraph astream chunk를 프레임워크 중립 진행 정보로 추출한다."""
+"""LangGraph astream chunk를 프레임워크 중립 진행 정보로 추출하고 표현 형태로 변환한다."""
 from dataclasses import dataclass
 
 from langchain_core.messages import AIMessage, ToolMessage
@@ -38,3 +38,17 @@ def _message_to_step(message) -> GraphStep | None:
         truncated = bool(message.response_metadata.get("truncated", False))
         return GraphStep(kind="final", content=message_content_to_text(message), truncated=truncated)
     return None
+
+
+def step_metadata(step: GraphStep) -> dict:
+    """GraphStep을 status_update에 실을 구조화 metadata dict로 변환한다."""
+    if step.kind == "tool_call":
+        return {"kind": "tool_call", "agent": step.agent or "", "input": step.input or ""}
+    return {"kind": "tool_result", "agent": step.agent or "", "output": step.output or ""}
+
+
+def step_summary(step: GraphStep) -> str:
+    """GraphStep을 사람이 읽을 한 줄 요약 텍스트로 만든다."""
+    if step.kind == "tool_call":
+        return f"calling {step.agent}: {step.input or ''}"
+    return f"{step.agent} returned: {step.output or ''}"

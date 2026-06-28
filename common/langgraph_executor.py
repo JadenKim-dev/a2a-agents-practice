@@ -8,7 +8,7 @@ from a2a.server.tasks import TaskUpdater
 from a2a.helpers.proto_helpers import new_task_from_user_message
 from a2a.types import Part, TaskState
 
-from common.graph_progress import GraphStep, extract_graph_step
+from common.graph_progress import GraphStep, extract_graph_step, step_metadata, step_summary
 
 
 class InvocableGraph(Protocol):
@@ -66,17 +66,3 @@ class LangGraphExecutor(AgentExecutor):
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
         raise NotImplementedError("cancel is out of scope for the PoC")
-
-
-def step_metadata(step: GraphStep) -> dict:
-    """GraphStep을 status_update에 실을 구조화 metadata dict로 변환한다."""
-    if step.kind == "tool_call":
-        return {"kind": "tool_call", "agent": step.agent or "", "input": step.input or ""}
-    return {"kind": "tool_result", "agent": step.agent or "", "output": step.output or ""}
-
-
-def step_summary(step: GraphStep) -> str:
-    """GraphStep을 사람이 읽을 한 줄 요약 텍스트로 만든다."""
-    if step.kind == "tool_call":
-        return f"calling {step.agent}: {step.input or ''}"
-    return f"{step.agent} returned: {step.output or ''}"
