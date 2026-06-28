@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 from common.agent_card import build_agent_card
 from orchestrator.agent_tool import build_agent_tool, tool_description
 
@@ -85,7 +87,10 @@ async def test_build_agent_tool_emits_sub_events_with_path():
     card = _research_card()
     emitted = []
 
-    async def fake_call_agent(http, card_arg, text, on_event=None):
+    async def fake_call_agent(
+        http, card_arg, text, on_event: Callable[[dict], None] | None = None
+    ):
+        assert on_event is not None
         on_event({"kind": "tool_call", "agent": "tavily", "input": "quantum"})
         on_event({"kind": "tool_result", "agent": "tavily", "output": "OUT[quantum]"})
         return "briefing"
