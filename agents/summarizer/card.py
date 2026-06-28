@@ -1,7 +1,9 @@
 """Summarizer 에이전트의 A2A AgentCard를 정의한다."""
+import os
+
 from common.agent_card import build_agent_card
 
-SUMMARIZER_URL = "http://127.0.0.1:9002/"
+SUMMARIZER_URL = os.environ.get("SUMMARIZER_PUBLIC_URL", "http://127.0.0.1:9002/")
 
 SUMMARIZER_CARD = build_agent_card(
     name="summarizer",
