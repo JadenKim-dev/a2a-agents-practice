@@ -358,7 +358,45 @@ binds:
 
 검증은 접근 B와 동일하게 **로컬 수동 + 절차 문서화**(agentgateway는 외부 바이너리라 CI 비포함).
 
-### 9-E. 범위 밖 (접근 B와 동일)
+### 9-E. 검증 결과 (실측, 2026-06-28)
+
+프로덕션 config(:8080)로 `scripts/run_with_gateway.sh` 전체 스택(research :9001, summarizer :9002,
+게이트웨이 :8080, 오케스트레이터 :9000)을 띄워 §9-D 4종을 모두 수행했고, **모두 통과**했다.
+실제 OpenAI/Tavily 키로 research(웹검색)→summarizer 흐름을 실행했다. (agentgateway v1.3.1)
+
+**검증 1 — 카드 discovery + prefix url 광고: ✅**
+- `curl :8080/research/.well-known/agent-card.json` → HTTP 200, `supportedInterfaces[0].url == http://127.0.0.1:8080/research/`.
+- `curl :8080/summarizer/.well-known/agent-card.json` → HTTP 200, `supportedInterfaces[0].url == http://127.0.0.1:8080/summarizer/`.
+- 게이트웨이 로그: research 카드는 `route=default/route0 endpoint=127.0.0.1:9001`, summarizer 카드는
+  `route=default/route1 endpoint=127.0.0.1:9002`로 분기. 둘 다 `protocol=a2a http.status=200`
+  (백엔드는 `/.well-known/...`만 아는데 200 = `urlRewrite.path.prefix: /` strip 동작).
+
+**검증 4 — path 격리: ✅**
+- 미정의 prefix `:8080/unknown/.well-known/agent-card.json` → **HTTP 404**.
+- `:8080/summarizer/...`는 summarizer 카드(`name: summarizer`), `:8080/research/...`는 research 카드(`name: research`)
+  반환 — 라우트가 섞이지 않음(route0↔route1 정확히 분리).
+
+**검증 2 — 오케스트레이터 end-to-end: ✅**
+- `POST :9000/run` → `tool_call`(research) → `tool_result`(research) → `tool_call`(summarizer) →
+  `tool_result`(summarizer) → `final` SSE 정상. discovery skip·에러 없음.
+- 게이트웨이 로그 결정타:
+  `http.method=POST http.path=/research/ ... a2a.method=SendStreamingMessage http.status=200 duration=7019ms`,
+  `http.method=POST http.path=/summarizer/ ... a2a.method=SendStreamingMessage http.status=200 duration=4402ms`
+  — 단일 포트 :8080에서 path-prefix로 두 백엔드(:9001/:9002)에 정확히 라우팅, 스트리밍 message/send를 깨지 않고 중계.
+
+**검증 3 — 스트리밍 중간 이벤트 점진 도착(버퍼링 없음): ✅**
+- 한 `/run` 응답의 이벤트 도착 타임라인(초): 3(research tool_call) → 4(`tavily_search` tool_call, `path:["research"]`)
+  → 6(tavily tool_result) → 10(research tool_result) → 19(summarizer tool_call) → 24(summarizer tool_result) → 28(final).
+  중간에 keep-alive ping(15초)도 통과.
+- 서브 에이전트의 `path:["research"]` 이벤트(`status_update`)가 게이트웨이를 통과했고, 이벤트가
+  **마지막에 몰리지 않고 점진적으로 도착** — 게이트웨이의 SSE 버퍼링 없음.
+
+**결론**: 접근 A(단일 포트 + path-prefix strip)에서 agentgateway는 a2a-sdk 1.1.0의 카드 discovery,
+JSON-RPC 스트리밍 `message/send`, SSE 중간 이벤트를 모두 투명하게 중계한다. 코드 변경 없이
+config/스크립트/README의 url 값만 단일 포트 + prefix로 바꿔 전환을 완료했다. 접근 B(§8)와 접근 A(§9)
+모두 동일한 패스스루 보증 위에 서며, 다음 단계인 부가 정책(인증/rate limit/관측성)은 이 단일 진입점에 걸 수 있다.
+
+### 9-F. 범위 밖 (접근 B와 동일)
 
 인증/인가·rate limit·관측성(다음 단계), TLS/CORS(로컬 PoC 불필요), 게이트웨이 바이너리 설치 자동화(수동),
 게이트웨이 카드 rewrite 전환(PR #2251 포함 릴리스 나올 때 재검토 — §7-A). 모두 이번 범위 밖.
