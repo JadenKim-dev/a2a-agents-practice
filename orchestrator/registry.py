@@ -1,12 +1,14 @@
 """알려진 A2A 에이전트 URL 목록을 두고 카드를 discovery한다."""
+import os
+
 import httpx
 
 from a2a.client import A2ACardResolver
 from a2a.types import AgentCard
 
 AGENT_URLS: dict[str, str] = {
-    "research": "http://127.0.0.1:9001",
-    "summarizer": "http://127.0.0.1:9002",
+    "research": os.environ.get("RESEARCH_AGENT_URL", "http://127.0.0.1:9001"),
+    "summarizer": os.environ.get("SUMMARIZER_AGENT_URL", "http://127.0.0.1:9002"),
 }
 
 
