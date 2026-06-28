@@ -153,3 +153,37 @@ CI에 묶기보다 **로컬 수동 검증 + 절차 문서화**를 우선한다.
 - **SSE 버퍼링**: 게이트웨이가 스트리밍 응답을 버퍼링하면 중간 진행 이벤트가 사라진다. 검증 3번이 이를 잡는다.
 - **카드 url ↔ bind 포트 분리**: 광고 url과 실제 bind 포트를 헷갈리면 게이트웨이 우회/연결 실패가 난다.
   설계상 둘을 명시적으로 분리(4-b)해 이 혼동을 차단한다.
+
+## 8. 검증 결과 (2026-06-28)
+
+실제 agentgateway 바이너리로 전체 스택을 띄워 §5의 검증 3종을 모두 수행했고, **세 미지수가 모두 해소**됐다.
+
+**환경**
+- agentgateway **v1.3.1** (GitHub release `agentgateway-darwin-arm64`, sha256 검증 후 `~/.local/bin`에 설치).
+- config 플래그는 `-f`(스크립트와 일치). `--validate-only`로 우리 `config/agentgateway.yaml`이
+  v1.3.1 스키마에서 "Configuration is valid!" 확인.
+- 실제 OpenAI/Tavily 키로 research(웹검색)→summarizer 흐름을 실행.
+
+**검증 1 — 카드 discovery 통과 + url 광고: ✅**
+- `curl :8001/.well-known/agent-card.json` → `supportedInterfaces[0].url == http://127.0.0.1:8001/`
+  (백엔드는 9001에 바인딩하지만 카드는 게이트웨이 주소를 광고 — Task 1 환경변수 외부화가 실제로 동작).
+- `:8002`(summarizer)도 동일하게 게이트웨이 주소 광고.
+- 게이트웨이 로그: `http.path=/.well-known/agent-card.json ... endpoint=127.0.0.1:9001 http.status=200 protocol=a2a`.
+
+**검증 2 — 오케스트레이터 end-to-end: ✅**
+- 오케스트레이터를 `RESEARCH_AGENT_URL/SUMMARIZER_AGENT_URL`을 게이트웨이 포트로 둔 채 기동,
+  `POST :9000/run`이 `tool_call`→`tool_result`→`final` SSE를 정상 반환. discovery skip·에러 없음.
+- 게이트웨이 로그 결정타:
+  `http.method=POST http.path=/ protocol=a2a a2a.method=SendStreamingMessage http.status=200 duration=12236ms`
+  — agentgateway가 A2A 프로토콜과 `SendStreamingMessage`를 인지하고 12초짜리 스트리밍 요청을 깨지 않고 중계.
+
+**검증 3 — 스트리밍 중간 이벤트 통과(버퍼링 없음): ✅**
+- 한 `/run` 응답의 이벤트 도착 타임라인(초): 16(research tool_call) → 17(`tavily_search` tool_call,
+  `path:["research"]`) → 21(tavily tool_result) → 28(research tool_result) → 32(final).
+- 서브 에이전트의 `status_update`(=`path:["research"]` 이벤트)가 게이트웨이를 통과했고, 이벤트가
+  **마지막에 몰리지 않고 점진적으로 도착** — 게이트웨이의 SSE 버퍼링 없음.
+
+**결론**: 접근 B(포트 1:1 패스스루)에서 agentgateway는 a2a-sdk 1.1.0의 카드 discovery,
+JSON-RPC 스트리밍 `message/send`, SSE 중간 이벤트를 모두 투명하게 중계한다. 카드 url 외부화만으로
+오케스트레이터 코드 변경 없이 게이트웨이를 끼울 수 있음을 확인했다. 다음 단계인 접근 A(경로 라우팅)와
+부가 정책(인증/rate limit/관측성)은 이 패스스루 기반 위에서 진행 가능하다.
