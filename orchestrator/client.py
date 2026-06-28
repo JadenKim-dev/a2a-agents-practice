@@ -36,7 +36,7 @@ async def call_agent(
 
 
 def extract_progress_metadata(stream_response: StreamResponse) -> dict | None:
-    """status_update의 message.metadata에서 진행 정보 dict를 꺼낸다. kind가 없으면 None을 반환한다."""
+    """status_update 이벤트에서 진행 상황 메타데이터를 추출한다. 진행 정보가 아니면 None을 반환한다."""
     if stream_response.WhichOneof("payload") != "status_update":
         return None
     message = stream_response.status_update.status.message
