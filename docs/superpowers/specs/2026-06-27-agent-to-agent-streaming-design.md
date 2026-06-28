@@ -42,7 +42,8 @@ A2A 명세에는 "에이전트의 툴 사용"을 위한 전용 타입이 없다.
                    status.message.metadata 파싱 → on_event(구조화 dict)
                      └─ agent_tool: 콜백 이벤트에 path=[이_에이전트명] 붙여 큐에 push
                           └─ orchestrate.run_task_stream
-                               ReAct astream chunk + 서브 이벤트 큐를 시간순 병합
+                               ReAct astream을 백그라운드 태스크로 돌려 그 이벤트도
+                               같은 큐에 합류시키고, 단일 큐를 시간순으로 소비
                                  └─ POST /run SSE → 소비자
 ```
 
@@ -58,7 +59,7 @@ A2A 명세에는 "에이전트의 툴 사용"을 위한 전용 타입이 없다.
 
 서브 에이전트 graph와 오케스트레이터 graph 모두 LangGraph이므로 `astream(stream_mode="updates")` chunk 형태가 동일하다. 현재 `orchestrator/events.py`의 `_message_to_event`가 하는 "chunk/message → (kind, agent, input/output) 추출" 로직을 양쪽이 공유하도록 **순수 추출 함수 수준까지만** `common/`으로 옮긴다.
 
-- 추출 결과는 프레임워크 중립적인 형태(예: `{kind, agent, input?, output?, content?, truncated?}` dict 또는 작은 dataclass).
+- 추출 결과는 프레임워크 중립적인 작은 dataclass(`GraphStep{kind, agent?, input?, output?, content?, truncated}`)로 표현한다.
 - `orchestrator/events.py`는 이 추출 결과를 오케스트레이터 전용 `ProgressEvent`로 감싸고, `LangGraphExecutor`는 같은 추출 결과를 A2A `metadata`로 감싼다.
 - `ProgressEvent` 자체는 오케스트레이터 전용 표현이므로 `common/`으로 옮기지 않는다.
 
@@ -90,9 +91,9 @@ tool 함수는 문자열만 반환하고 ReAct astream chunk에는 서브 에이
 
 ### (f) `orchestrator/orchestrate.py` — ReAct chunk + 서브 이벤트 큐 병합
 
-- `asyncio.Queue`를 만들어 agent_tool 싱크가 서브 이벤트를 push.
-- `run_task_stream`은 graph.astream과 큐 두 소스를 동시에 소비해 **시간순으로 yield**한다.
-- graph.astream이 끝나면 큐에 sentinel을 넣어 병합 루프를 종료하고, 남은 서브 이벤트를 drain한 뒤 종료(유실 방지).
+- `asyncio.Queue` 하나를 만들어 agent_tool 싱크가 서브 이벤트를 push.
+- ReAct graph.astream은 백그라운드 태스크로 돌리고, 거기서 나온 오케스트레이터 이벤트도 **같은 큐에 push**한다. `run_task_stream`은 두 소스를 직접 병합하지 않고 **단일 큐를 시간순으로 소비해 yield**한다(자연스러운 합류).
+- 백그라운드 태스크는 종료 시 큐에 sentinel(`_STREAM_DONE`)을 넣어 소비 루프를 끝낸다. 소비 루프는 sentinel을 만날 때까지 큐를 비우므로 남은 서브 이벤트가 유실되지 않는다.
 - 기존 try/except(스트림 무중단, `error_event`) 유지.
 
 ## 5. 에러 처리
@@ -116,6 +117,6 @@ tool 함수는 문자열만 반환하고 ReAct astream chunk에는 서브 에이
 ## 7. 범위 밖 (out of scope)
 
 - LLM 토큰 단위 스트리밍.
-- extension URI 선언 및 카드 capabilities.extensions 등록.
+- extension URI 선언 및 카드 `capabilities.extensions` 등록. (단, A2A 네이티브 스트리밍을 켜기 위한 `capabilities.streaming=True`는 필수이므로 카드에 설정한다 — extension 등록과는 별개.)
 - 3단계 이상 실제 중첩 시나리오(설계는 `path` 리스트로 확장 가능하나 PoC 시나리오는 2단계).
 - cancel/푸시 알림.
