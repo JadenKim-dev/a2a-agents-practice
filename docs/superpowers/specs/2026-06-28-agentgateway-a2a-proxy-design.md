@@ -178,7 +178,32 @@ rewrite는 게이트웨이가 해야 깔끔하다"는 지적이 구조적으로 
 **결론**: 환경변수 외부화(`*_PUBLIC_URL`)는 임시 우회가 아니라 **이 SDK 버전에서 카드가 게이트웨이
 주소를 광고하게 하는 유일한 방법**이다. 게이트웨이 rewrite로 대체하려면 SDK가 top-level `url`을
 호출 목적지로 인식하는 버전이거나, 게이트웨이가 `supportedInterfaces[].url`까지 rewrite해야 한다 —
-둘 다 현재 성립하지 않는다.
+둘 다 우리가 테스트한 v1.3.1에서는 성립하지 않는다.
+
+#### upstream 추적: 이 한계는 v1.3.1의 버그였고 이미 수정됨 (미출시)
+
+이 rewrite 한계로 별도 이슈가 등록된 적은 없으나, agentgateway가 PR로 직접 인지·수정했다 —
+[agentgateway#2251 "Support A2A v1.0 agent card format in URL rewriting"](https://github.com/agentgateway/agentgateway/pull/2251)
+(머지 2026-06-24, commit `c86dc1692`, `crates/agentgateway/src/a2a/mod.rs`). PR 본문이 우리 실측과 정확히 일치한다:
+
+> "A2A v1.0 removed the top-level `url` field from AgentCard and replaced it with a `supportedInterfaces` array
+> where each AgentInterface carries its own `url`. The gateway's `apply_to_response` **previously bailed with
+> 'agent card missing URL' on any v1.0 response**." → 수정 후 v1.0(`supportedInterfaces`)은 각 interface entry의
+> url을 rewrite, v0.3(`url`)은 기존 동작 유지.
+
+타임라인이 우리 실증이 옳았음을 뒷받침한다:
+
+| 시점 | 사건 |
+|---|---|
+| 2026-06-22 | **v1.3.1 릴리스** — 우리가 설치/테스트한 버전 (수정 전, `supportedInterfaces` rewrite 미지원) |
+| 2026-06-24 | **PR #2251 머지** — `supportedInterfaces[].url` rewrite 추가 |
+| 2026-06-28(현재) | v1.3.1이 여전히 Latest. PR #2251 포함 릴리스는 **아직 미출시** |
+
+→ 우리가 겪은 건 v1.3.1의 실제 버그였고 이틀 뒤 고쳐졌으나, 아직 릴리스 바이너리에는 안 들어갔다.
+**지금 당장은 `*_PUBLIC_URL` 외부화가 여전히 옳고 필요하다.** 다만 PR #2251을 포함한 릴리스(v1.3.2/v1.4.x 등)가
+나오면 게이트웨이가 `supportedInterfaces[].url`까지 rewrite하므로, 그때는 §확정된 결정의 "카드 URL 처리"를
+재검토해 **`*_PUBLIC_URL`과 `card.py`의 url 외부화를 제거하고 게이트웨이 rewrite에 맡기는 더 깔끔한 구조로
+전환 가능**하다. 이는 "에이전트는 게이트웨이를 몰라야 한다"는 계층 분리 원칙에도 부합한다 — 다음 단계의 검토 항목.
 
 ## 8. 검증 결과 (2026-06-28)
 
