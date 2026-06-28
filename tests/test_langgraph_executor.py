@@ -53,7 +53,17 @@ async def _drain(event_queue: EventQueueLegacy) -> list[Event]:
 
 
 def _status_events(events):
-    return [e for e in events if isinstance(e, TaskStatusUpdateEvent)]
+    return [event for event in events if isinstance(event, TaskStatusUpdateEvent)]
+
+
+async def _run_executor(graph) -> list[TaskStatusUpdateEvent]:
+    # graph로 executor를 실행하고 방출된 status 이벤트를 반환한다.
+    executor = LangGraphExecutor(graph)
+    request = _user_request("research")
+    context = RequestContext(call_context=ServerCallContext(), request=request)
+    event_queue = await InMemoryQueueManager().create_or_tap("t1")
+    await executor.execute(context, event_queue)
+    return _status_events(await _drain(event_queue))
 
 
 async def test_executor_emits_tool_call_status_update_with_metadata():
@@ -63,19 +73,14 @@ async def test_executor_emits_tool_call_status_update_with_metadata():
             {"name": "tavily", "args": {"input": "quantum"}, "id": "c1", "type": "tool_call"}])]}},
         {"model": {"messages": [AIMessage(content="briefing done")]}},
     ])
-    executor = LangGraphExecutor(graph)
-    request = _user_request("research quantum")
-    context = RequestContext(call_context=ServerCallContext(), request=request)
-    event_queue = await InMemoryQueueManager().create_or_tap("t1")
 
     # when
-    await executor.execute(context, event_queue)
+    events = await _run_executor(graph)
 
     # then — 중간 tool_call status_update의 metadata가 구조화 dict로 실린다
-    events = _status_events(await _drain(event_queue))
-    working = [e for e in events
-               if e.status.state == TaskState.TASK_STATE_WORKING and dict(e.status.message.metadata)]
-    metadata = dict(working[0].status.message.metadata)
+    working_events = [event for event in events
+               if event.status.state == TaskState.TASK_STATE_WORKING and dict(event.status.message.metadata)]
+    metadata = dict(working_events[0].status.message.metadata)
     assert metadata["kind"] == "tool_call"
     assert metadata["agent"] == "tavily"
     assert metadata["input"] == "quantum"
@@ -87,20 +92,15 @@ async def test_executor_emits_tool_result_status_update_with_metadata():
         {"tools": {"messages": [ToolMessage(content="OUT[quantum]", name="tavily", tool_call_id="c1")]}},
         {"model": {"messages": [AIMessage(content="briefing done")]}},
     ])
-    executor = LangGraphExecutor(graph)
-    request = _user_request("research quantum")
-    context = RequestContext(call_context=ServerCallContext(), request=request)
-    event_queue = await InMemoryQueueManager().create_or_tap("t1")
 
     # when
-    await executor.execute(context, event_queue)
+    events = await _run_executor(graph)
 
     # then
-    events = _status_events(await _drain(event_queue))
-    result_meta = [dict(e.status.message.metadata) for e in events
-                   if dict(e.status.message.metadata).get("kind") == "tool_result"]
-    assert result_meta[0]["agent"] == "tavily"
-    assert result_meta[0]["output"] == "OUT[quantum]"
+    tool_result_metadatas = [dict(event.status.message.metadata) for event in events
+                   if dict(event.status.message.metadata).get("kind") == "tool_result"]
+    assert tool_result_metadatas[0]["agent"] == "tavily"
+    assert tool_result_metadatas[0]["output"] == "OUT[quantum]"
 
 
 async def test_executor_completes_with_final_text():
@@ -110,32 +110,22 @@ async def test_executor_completes_with_final_text():
             {"name": "tavily", "args": {"input": "q"}, "id": "c1", "type": "tool_call"}])]}},
         {"model": {"messages": [AIMessage(content="final briefing")]}},
     ])
-    executor = LangGraphExecutor(graph)
-    request = _user_request("research")
-    context = RequestContext(call_context=ServerCallContext(), request=request)
-    event_queue = await InMemoryQueueManager().create_or_tap("t1")
 
     # when
-    await executor.execute(context, event_queue)
+    events = await _run_executor(graph)
 
     # then — 완료 상태에 최종 텍스트가 실린다
-    events = _status_events(await _drain(event_queue))
-    completed = [e for e in events if e.status.state == TaskState.TASK_STATE_COMPLETED]
-    assert completed[-1].status.message.parts[0].text == "final briefing"
+    completed_events = [event for event in events if event.status.state == TaskState.TASK_STATE_COMPLETED]
+    assert completed_events[-1].status.message.parts[0].text == "final briefing"
 
 
 async def test_executor_marks_failed_when_graph_raises():
     # given — astream 진입 시 예외를 던지는 graph
     graph = FakeStreamingGraph(chunks=[], raises=RuntimeError("boom"))
-    executor = LangGraphExecutor(graph)
-    request = _user_request("anything")
-    context = RequestContext(call_context=ServerCallContext(), request=request)
-    event_queue = await InMemoryQueueManager().create_or_tap("t1")
 
     # when
-    await executor.execute(context, event_queue)
+    events = await _run_executor(graph)
 
     # then
-    events = _status_events(await _drain(event_queue))
-    states = [e.status.state for e in events]
+    states = [event.status.state for event in events]
     assert TaskState.TASK_STATE_FAILED in states
