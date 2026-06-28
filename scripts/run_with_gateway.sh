@@ -13,9 +13,9 @@ if ! command -v agentgateway >/dev/null 2>&1; then
   exit 1
 fi
 
-RESEARCH_PUBLIC_URL="http://127.0.0.1:8001/" python -m agents.research &
+RESEARCH_PUBLIC_URL="http://127.0.0.1:8080/research/" python -m agents.research &
 RESEARCH_PID=$!
-SUMMARIZER_PUBLIC_URL="http://127.0.0.1:8002/" python -m agents.summarizer &
+SUMMARIZER_PUBLIC_URL="http://127.0.0.1:8080/summarizer/" python -m agents.summarizer &
 SUMMARIZER_PID=$!
 
 agentgateway -f config/agentgateway.yaml &
@@ -24,8 +24,8 @@ GATEWAY_PID=$!
 # 백엔드와 게이트웨이가 리슨할 시간을 준 뒤 오케스트레이터를 띄운다.
 sleep 2
 
-RESEARCH_AGENT_URL="http://127.0.0.1:8001" \
-SUMMARIZER_AGENT_URL="http://127.0.0.1:8002" \
+RESEARCH_AGENT_URL="http://127.0.0.1:8080/research" \
+SUMMARIZER_AGENT_URL="http://127.0.0.1:8080/summarizer" \
 python -m orchestrator &
 ORCHESTRATOR_PID=$!
 
@@ -34,6 +34,6 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-echo "research→:8001, summarizer→:8002 (gateway), orchestrator :9000"
+echo "research→:8080/research, summarizer→:8080/summarizer (gateway), orchestrator :9000"
 echo "press Ctrl-C to stop"
 wait
