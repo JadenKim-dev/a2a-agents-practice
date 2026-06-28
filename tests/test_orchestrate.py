@@ -157,11 +157,11 @@ async def test_run_task_stream_merges_sub_agent_events_with_path(monkeypatch):
     events = await _collect(run_task_stream("research quantum", model=fake_model))
 
     # then — 서브 tavily 이벤트가 path=["research"]로 섞여 나오고, 로컬 이벤트는 path가 없다
-    sub_events = [e for e in events if e.path == ["research"]]
-    assert [e.type for e in sub_events] == ["tool_call", "tool_result"]
+    sub_events = [event for event in events if event.path == ["research"]]
+    assert [sub_event.type for sub_event in sub_events] == ["tool_call", "tool_result"]
     assert sub_events[0].agent == "tavily"
     assert sub_events[1].output == "OUT[quantum]"
-    local_tool_calls = [e for e in events if e.type == "tool_call" and e.path is None]
+    local_tool_calls = [event for event in events if event.type == "tool_call" and event.path is None]
     assert local_tool_calls[0].agent == "research"
     assert events[-1].type == "final"
     assert events[-1].content == "final answer"
