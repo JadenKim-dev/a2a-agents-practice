@@ -5,6 +5,9 @@
 #   agentgateway 바이너리는 PATH에 설치되어 있다고 가정한다.
 set -euo pipefail
 
+# 어느 디렉터리에서 실행하든 모듈 경로(python -m ...)와 config 상대경로가 맞도록 repo 루트로 이동한다.
+cd "$(dirname "$0")/.."
+
 if ! command -v agentgateway >/dev/null 2>&1; then
   echo "agentgateway 바이너리를 PATH에서 찾을 수 없습니다. https://agentgateway.dev 설치 안내를 참고하세요." >&2
   exit 1
