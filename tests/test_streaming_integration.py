@@ -1,11 +1,14 @@
 """
-실제 Starlette 앱을 httpx ASGITransport로 인-프로세스 구동하여
-executor ↔ client 왕복 스트리밍을 검증하는 통합 테스트.
+executor와 client 사이의 스트리밍 왕복을 검증하는 통합 테스트.
 
-단위 테스트가 monkeypatch로 stub하는 transport seam을 실제로 통과해
-(a) card.capabilities.streaming=True → SDK가 streaming 경로 진입 → 중간 status_update 도달,
-(b) final 텍스트 last-write-wins (완료 이벤트가 마지막에 도착해 최종 텍스트가 이김)
-두 가지를 동시에 검증한다.
+실제 Starlette 앱을 httpx ASGITransport로 같은 프로세스 안에서 띄워
+네트워크 없이 호출한다. 단위 테스트는 이 transport 계층을 monkeypatch로
+대체하지만, 여기서는 실제 transport를 그대로 통과시켜 두 가지를 확인한다.
+
+(a) 카드에 streaming=True가 켜져 있으면 SDK가 스트리밍 경로를 타고,
+    그 결과 중간 tool_call metadata가 client까지 전달된다.
+(b) 중간 이벤트가 여럿 도착해도 마지막에 온 완료 이벤트가 이겨서
+    (last-write-wins) 최종 텍스트가 올바르게 남는다.
 """
 import httpx
 from langchain_core.messages import AIMessage
@@ -71,12 +74,12 @@ async def test_streaming_delivers_tool_call_metadata_and_correct_final_text():
         )
 
     # then — (a) tool_call metadata가 on_event에 최소 1회 도달
-    tool_call_events = [m for m in received_metadata if m.get("kind") == "tool_call"]
-    assert len(tool_call_events) >= 1, (
+    metadatas = [metadata for metadata in received_metadata if metadata.get("kind") == "tool_call"]
+    assert len(metadatas) >= 1, (
         f"tool_call metadata가 on_event에 도달하지 않았다. 받은 metadata: {received_metadata}"
     )
-    assert tool_call_events[0]["agent"] == "search"
-    assert tool_call_events[0]["input"] == "streaming topic"
+    assert metadatas[0]["agent"] == "search"
+    assert metadatas[0]["input"] == "streaming topic"
 
     # then — (b) 최종 텍스트가 graph의 최종 chunk 텍스트와 일치 (last-write-wins 안전)
     assert result == "streaming final result", (
