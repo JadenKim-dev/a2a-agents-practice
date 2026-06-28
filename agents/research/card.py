@@ -1,7 +1,9 @@
 """Research 에이전트의 A2A AgentCard를 정의한다."""
+import os
+
 from common.agent_card import build_agent_card
 
-RESEARCH_URL = "http://127.0.0.1:9001/"
+RESEARCH_URL = os.environ.get("RESEARCH_PUBLIC_URL", "http://127.0.0.1:9001/")
 
 RESEARCH_CARD = build_agent_card(
     name="research",
