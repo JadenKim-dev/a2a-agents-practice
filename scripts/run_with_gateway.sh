@@ -13,9 +13,16 @@ if ! command -v agentgateway >/dev/null 2>&1; then
   exit 1
 fi
 
-RESEARCH_PUBLIC_URL="http://127.0.0.1:8080/research/" python -m agents.research &
+# 관측 모드: OBSERVABILITY=1 이면 OTEL 엔드포인트를 주입해 trace를 켠다(미설정 시 no-op).
+OTEL_ENV=""
+if [ "${OBSERVABILITY:-0}" = "1" ]; then
+  OTEL_ENV="OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317"
+  echo "observability ON → OTLP traces to http://localhost:4317 (Jaeger)"
+fi
+
+env $OTEL_ENV RESEARCH_PUBLIC_URL="http://127.0.0.1:8080/research/" python -m agents.research &
 RESEARCH_PID=$!
-SUMMARIZER_PUBLIC_URL="http://127.0.0.1:8080/summarizer/" python -m agents.summarizer &
+env $OTEL_ENV SUMMARIZER_PUBLIC_URL="http://127.0.0.1:8080/summarizer/" python -m agents.summarizer &
 SUMMARIZER_PID=$!
 
 agentgateway -f config/agentgateway.yaml &
@@ -24,9 +31,10 @@ GATEWAY_PID=$!
 # 백엔드와 게이트웨이가 리슨할 시간을 준 뒤 오케스트레이터를 띄운다.
 sleep 2
 
-RESEARCH_AGENT_URL="http://127.0.0.1:8080/research" \
-SUMMARIZER_AGENT_URL="http://127.0.0.1:8080/summarizer" \
-python -m orchestrator &
+env $OTEL_ENV \
+  RESEARCH_AGENT_URL="http://127.0.0.1:8080/research" \
+  SUMMARIZER_AGENT_URL="http://127.0.0.1:8080/summarizer" \
+  python -m orchestrator &
 ORCHESTRATOR_PID=$!
 
 cleanup() {
