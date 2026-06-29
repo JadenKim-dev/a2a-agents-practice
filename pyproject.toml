@@ -21,6 +21,13 @@ dev = [
     "pytest-asyncio>=0.24",
     "anyio>=4",
 ]
+observability = [
+    "opentelemetry-sdk>=1.43,<2",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.43,<2",
+    "opentelemetry-instrumentation-httpx>=0.64b0,<1",
+    "opentelemetry-instrumentation-fastapi>=0.64b0,<1",
+    "opentelemetry-instrumentation-starlette>=0.64b0,<1",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
