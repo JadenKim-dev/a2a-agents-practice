@@ -226,6 +226,58 @@ POST :9000/run
 4. **하위호환**: `OTEL_*`·`config.tracing` 미설정으로 띄우면 기존 패스스루가 그대로 동작하고
    관측이 no-op으로 꺼지는지(게이트웨이 없는 직접 실행 경로 포함).
 
+### 6-A. 검증 결과 (실측, 2026-06-29)
+
+실제 agentgateway v1.3.1 바이너리 + 실제 OpenAI/Tavily 키로 전체 스택(research :9001, summarizer :9002,
+게이트웨이 :8080, 오케스트레이터 :9000)을 **관측 ON/OFF 두 모드**로 띄워 검증했다. **단, Docker 데몬이
+기동되지 않은 환경**이라 관측 스택 컨테이너(Prometheus/Grafana/Jaeger)는 띄우지 못했다. 따라서 메커니즘은
+게이트웨이 메트릭 엔드포인트(`:15020`)·게이트웨이 로그·OTLP 송출 시도 로그로 직접 확인하고, 컨테이너 UI에서
+보이는 최종 확인(Prometheus 타깃 UP·Grafana 패널 렌더·Jaeger span 트리)은 **다음 절차로 이연**한다.
+
+**검증 1 — 메트릭 노출: ✅**
+- 관측 ON으로 `/run` 1회 실행 후 `curl :15020/metrics`에 A2A 시리즈가 정확히 등장:
+  `agentgateway_requests_total{protocol="a2a",method="POST",status="200",route="default/route0",...}`(research),
+  `...route="default/route1"...`(summarizer). 카드 GET(method="GET")도 route0/route1로 분리 집계.
+- 지연 히스토그램도 존재: `agentgateway_request_duration_seconds_count{...protocol="a2a",route="default/route0"...} 2`,
+  `..._bucket{le="+Inf",...}`. 대시보드 PromQL이 참조하는 시리즈(`agentgateway_requests_total`,
+  `agentgateway_request_duration_seconds_bucket`, 라벨 `protocol="a2a"`/`route`/`status`)가 실제로 존재함을 확인.
+- **이연**: Prometheus가 `:15020`를 스크랩해 타깃 `UP`이 되고 Grafana 패널에 값이 그려지는지(검증 2)는
+  Docker 스택 기동 후 확인. PromQL↔메트릭 시리즈 이름·라벨 일치는 위에서 정적으로 확인됨.
+
+**검증 2 — 오케스트레이터 end-to-end: ✅ (양 모드)**
+- 관측 OFF: `POST :9000/run` → `tool_call`×3·`tool_result`×3·`final`×1 SSE 정상. 게이트웨이 로그
+  `a2a.method=SendStreamingMessage http.status=200`로 research/summarizer 양쪽 중계 확인.
+- 관측 ON: 동일하게 정상. 게이트웨이 로그
+  `http.path=/research/ ... a2a.method=SendStreamingMessage http.status=200 duration=11456ms`,
+  `http.path=/summarizer/ ... duration=6397ms`.
+
+**검증 3 — end-to-end 트레이스 연결: ✅ (메커니즘 확정) / 이연 (UI 조립)**
+- **결정적 증거**: 관측 ON에서 한 `/run`의 게이트웨이 로그 4줄(research 카드 GET, summarizer 카드 GET,
+  research POST, summarizer POST)이 **모두 동일한 `trace.id=12cdfe49bd04f2f4025e49ca3bbdaf07`** 을 갖고
+  각기 다른 `span.id`를 가졌다. 오케스트레이터의 `HTTPXClientInstrumentor`가 주입한 traceparent를 게이트웨이가
+  채택했고, 그 trace-id가 research·summarizer 두 홉을 관통 — **§5의 미지수(오케스트레이터→게이트웨이→에이전트가
+  한 trace-id로 묶이는가)가 해소**됐다.
+- **오케스트레이터가 실제로 span을 송출**: OTLP exporter가 `localhost:4317`로 export를 시도하고
+  (Jaeger 부재로) `Connection refused`를 로그에 남겼다 — Python 계측이 살아 span을 만들고 있다는 양성 증거.
+- **이연**: Jaeger UI에서 이 span들이 실제 트리로 조립돼 보이는지는 Docker 스택 기동 후 확인. 단 위 trace-id
+  관통이 조립의 근거이므로, 메커니즘 자체는 확정.
+- **부수 확인(graceful degradation)**: 관측 ON이지만 Jaeger 부재 상태에서도 세 서비스가 정상 기동하고
+  `/run`이 끝까지 성공했다. OTLP export 실패는 로그로만 남고 요청 처리를 막지 않는다(BatchSpanProcessor 비동기).
+
+**검증 3-스트리밍 — 중간 이벤트 점진 도착(버퍼링 없음): ✅**
+- 관측 ON 한 `/run`의 이벤트 도착 타임라인(초): 44(research tool_call) → 46(`path:["research"]` tavily tool_call)
+  → 47(tavily tool_result) → 53(research tool_result) → 57(summarizer tool_call) → 62(summarizer tool_result)
+  → 66(final). 서브 에이전트 `path:["research"]` 이벤트가 게이트웨이를 통과했고 **마지막에 몰리지 않고 점진 도착**.
+
+**검증 4 — 하위호환: ✅**
+- 관측 OFF(`OTEL_EXPORTER_OTLP_ENDPOINT` 미설정)로 띄운 스택에서 `/run`이 정상 동작하고, 세 프로세스 로그에
+  OTel/OTLP 활동이 전혀 없음. `setup_telemetry`가 no-op으로 꺼지고 ASGI/httpx 계측 미적용 — 기존 패스스루 무손상.
+
+**결론**: 관측의 핵심 메커니즘 4종(게이트웨이 A2A 메트릭 노출, end-to-end trace-id 관통, SSE 점진 도착,
+관측 ON/OFF 하위호환)을 실측으로 확정했다. Docker 스택 UI에서의 최종 가시화(Prometheus 타깃 UP, Grafana
+패널 렌더, Jaeger span 트리)만 환경 제약으로 이연하며, 그 근거가 되는 데이터(메트릭 시리즈·라벨, 관통 trace-id,
+span 송출 시도)는 이미 확인됐다. Docker Desktop 기동 후 §6의 1~3 UI 확인을 수행하면 완결된다.
+
 ## 7. 범위 밖 (YAGNI)
 
 - **인증/인가·rate limit** — 관측과 독립한 다음 단계.
