@@ -1,0 +1,40 @@
+{
+  "title": "A2A via agentgateway",
+  "uid": "a2a-gateway",
+  "schemaVersion": 39,
+  "time": { "from": "now-15m", "to": "now" },
+  "panels": [
+    {
+      "title": "A2A 호출량 (req/s, route별)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "sum by (route) (rate(agentgateway_requests_total{protocol=\"a2a\"}[1m]))", "legendFormat": "{{route}}" }
+      ]
+    },
+    {
+      "title": "지연 p95 (s, route별)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum by (le, route) (rate(agentgateway_request_duration_seconds_bucket{protocol=\"a2a\"}[5m])))", "legendFormat": "{{route}}" }
+      ]
+    },
+    {
+      "title": "에러율 (5xx 비율)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        { "expr": "sum(rate(agentgateway_requests_total{protocol=\"a2a\",status=~\"5..\"}[1m])) / sum(rate(agentgateway_requests_total{protocol=\"a2a\"}[1m]))", "legendFormat": "5xx ratio" }
+      ]
+    },
+    {
+      "title": "상태코드별 호출 (route×status)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "sum by (route, status) (rate(agentgateway_requests_total{protocol=\"a2a\"}[1m]))", "legendFormat": "{{route}} {{status}}" }
+      ]
+    }
+  ]
+}

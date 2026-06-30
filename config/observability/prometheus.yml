@@ -1,0 +1,8 @@
+# agentgateway가 :15020/metrics에 내는 A2A 메트릭을 스크랩한다.
+# 게이트웨이는 호스트에서 돌므로 컨테이너에서 host.docker.internal로 가리킨다(macOS/Windows Docker Desktop).
+global:
+  scrape_interval: 5s
+scrape_configs:
+  - job_name: agentgateway
+    static_configs:
+      - targets: ["host.docker.internal:15020"]
